@@ -1,6 +1,8 @@
 package com.cronos
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
@@ -29,8 +31,7 @@ class MainActivity : AppCompatActivity() {
     // Resultado del selector de fotos que abre el botón "Añadir fotos" de la página.
     private val pickFiles =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val uris = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
-            fileCallback?.onReceiveValue(uris)
+            fileCallback?.onReceiveValue(selectedUris(result.resultCode, result.data))
             fileCallback = null
         }
 
@@ -90,7 +91,11 @@ class MainActivity : AppCompatActivity() {
                 fileCallback?.onReceiveValue(null)
                 fileCallback = callback
                 return try {
-                    pickFiles.launch(params.createIntent())
+                    val intent = params.createIntent()
+                    if (params.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+                        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    }
+                    pickFiles.launch(intent)
                     true
                 } catch (e: Exception) {
                     fileCallback = null
@@ -100,6 +105,21 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.loadUrl("https://${WebViewAssetLoader.DEFAULT_DOMAIN}/assets/index.html")
+    }
+
+    /**
+     * Devuelve todas las fotos elegidas. Con selección múltiple Android las manda
+     * en ClipData, y FileChooserParams.parseResult solo lee una: por eso antes,
+     * al elegir varias y pulsar "Hecho", no llegaba ninguna a la página.
+     */
+    private fun selectedUris(resultCode: Int, data: Intent?): Array<Uri>? {
+        if (resultCode != Activity.RESULT_OK || data == null) return null
+        val uris = mutableListOf<Uri>()
+        data.clipData?.let { clip ->
+            for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { uris.add(it) }
+        }
+        if (uris.isEmpty()) data.data?.let { uris.add(it) }
+        return if (uris.isEmpty()) null else uris.toTypedArray()
     }
 
     override fun onResume() {
