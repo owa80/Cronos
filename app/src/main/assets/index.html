@@ -370,7 +370,7 @@ function loadThumb(file){
 }
 async function addFiles(list){
   if(S.phase!=='prep') return;
-  const imgs=[...list].filter(f=>f.type&&f.type.startsWith('image/'))
+  const imgs=[...list].filter(f=>f.type?f.type.startsWith('image/'):/\.(jpe?g|png|gif|webp|bmp|heic|heif)$/i.test(f.name||''))
     .sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
   if(!imgs.length){toast('No se ha encontrado ninguna imagen');return;}
   const known=new Set(S.photos.map(p=>p.sig).filter(Boolean));
