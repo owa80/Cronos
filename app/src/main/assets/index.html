@@ -192,6 +192,21 @@ table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;
 .copybox{width:100%;min-height:120px;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
 .foot{font-size:12px;color:var(--muted)}
 
+.tappable{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+/* Ventanas (nombre, elegir fotos, temporada) */
+.modal{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}
+@media (min-width:600px){.modal{align-items:center}}
+.backdrop{position:absolute;inset:0;background:rgba(5,15,22,.55)}
+.sheet{position:relative;background:var(--surface);color:var(--ink);border-radius:10px 10px 0 0;width:100%;max-width:560px;max-height:88vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+@media (min-width:600px){.sheet{border-radius:10px}}
+.sheet h3{margin:0;font-size:18px}
+.txt{font:inherit;font-size:17px;color:var(--ink);background:var(--surface);border:1px solid var(--accent);border-radius:6px;min-height:46px;padding:6px 10px;width:100%;box-sizing:border-box}
+.pickgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.pickgrid .tile{cursor:pointer}
+.pickgrid .tile.placed{opacity:.6}
+.pickgrid .tile.sel{opacity:1}
+.season{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:14px}
+.season b{font-variant-numeric:tabular-nums}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--bar);color:var(--bar-ink);padding:10px 16px;border-radius:6px;font-size:14px;max-width:calc(100% - 32px);border:1px solid var(--line)}
 </style>
 </head>
@@ -200,6 +215,7 @@ table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;
 <div class="wrap" id="app"></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
+<script src="xlsx.mini.min.js"></script>
 <script>
 (function(){
 'use strict';
@@ -246,16 +262,16 @@ function load(){
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(Object.assign({},S,{photos:[]}))); }catch(e){} }
 
 let S=load()||fresh();
-const ui={sel:null,editing:null,confirm:null,flash:null,customInterval:false,copyText:null};
+const ui={sel:null,editing:null,confirm:null,flash:null,customInterval:false,copyText:null,modal:null,saving:false};
 let raf=0, toastT=0, down=null, ordN=0, lastG=-2;
 
 /* Estados de la parrilla de llegadas durante el control */
-const ST_TEXT={go:'Sale ya',out:'En ruta',idle:'Espera','in':'En meta'};
+const ST_TEXT={go:'Siguiente',out:'En ruta',idle:'Espera','in':'En meta'};
 function stateFor(rank,elapsed){
   const iv=S.runInterval*1000;
   if(!iv) return 'out';
-  const g=Math.floor(elapsed/iv);
-  return rank<g?'out':(rank===g?'go':'idle');
+  const g=Math.floor(elapsed/iv); /* g = último en salir; el 0 sale al pulsar Iniciar */
+  return rank<=g?'out':(rank===g+1?'go':'idle');
 }
 function applyStates(elapsed){
   const iv=S.runInterval*1000, g=iv?Math.floor(elapsed/iv):-1;
@@ -272,9 +288,9 @@ function nextInfo(elapsed){
   const iv=S.runInterval*1000, n=S.order.length;
   if(!iv) return 'Salida conjunta: todos en ruta';
   const g=Math.floor(elapsed/iv);
-  if(g>=n) return 'Todos han salido';
-  const p=P(S.order[g]);
-  return 'Sale ahora: '+(p?p.name:'')+(g<n-1?' · siguiente en '+lab(Math.ceil((iv-(elapsed%iv))/1000)):' · última salida');
+  if(g>=n-1) return 'Todos han salido';
+  const p=P(S.order[g+1]);
+  return 'Siguiente: '+(p?p.name:'')+' · sale en '+lab(Math.ceil((iv-(elapsed%iv))/1000));
 }
 
 /* Biblioteca de fotos: IndexedDB; si no está disponible, localStorage; si tampoco, solo memoria */
@@ -401,10 +417,7 @@ async function addFiles(list){
 
 /* ---------- Plantillas ---------- */
 function caption(p){
-  if(ui.editing===p.id){
-    return '<div class="cap"><input class="rename" id="renameInput" data-id="'+p.id+'" maxlength="40" value="'+esc(p.name)+'" aria-label="Nombre del palista"></div>';
-  }
-  return '<div class="cap"><span>'+esc(p.name)+'</span><button class="ed" data-act="rename" data-id="'+p.id+'" aria-label="Editar nombre de '+esc(p.name)+'">✎</button></div>';
+  return '<div class="cap"><span class="tappable" data-act="rename" data-id="'+p.id+'">'+esc(p.name)+'</span><button class="ed" data-act="rename" data-id="'+p.id+'" aria-label="Cambiar el nombre de '+esc(p.name)+'">✎</button></div>';
 }
 function img(p){return '<img src="'+p.thumb+'" alt="'+esc(p.name)+'" draggable="false">';}
 
@@ -436,6 +449,7 @@ function prepView(){
     '<div class="field"><span class="lbl">Tipo de salida</span><div class="chips">'+modes+'</div></div>'+
     ivField+
     '<div class="field"><label class="lbl" for="day">Día</label><input type="date" id="day" value="'+esc(S.day)+'"></div>'+
+    '<div class="field"><span class="lbl">Temporada</span>'+seasonLine()+'</div>'+
     '</div></section>';
 
   const poolTiles=pool.map(p=>
@@ -445,7 +459,7 @@ function prepView(){
       :'<button class="x" data-act="remove" data-id="'+p.id+'" aria-label="Borrar la foto de '+esc(p.name)+' de la biblioteca">×</button>')+'</div>'+caption(p)+'</div>'
   ).join('');
   let poolInner=poolTiles;
-  if(!S.photos.length) poolInner='<div class="empty-note">Aún no hay fotos. Cárgalas una sola vez con «Añadir fotos» y quedarán guardadas. El nombre se toma del nombre del archivo y se puede cambiar con ✎.</div>';
+  if(!S.photos.length) poolInner='<div class="empty-note">Aún no hay fotos. Cárgalas una sola vez con «Añadir fotos» y quedarán guardadas. Toca el nombre de cada foto para ponerle el del palista.</div>';
   else if(!pool.length) poolInner='<div class="empty-note">Todas las fotos están en la parrilla. Suelta aquí una foto para sacarla del control.</div>';
 
   const photosPanel='<section class="panel"><div class="panel-head"><h2>Biblioteca de fotos</h2><span class="count">'+S.photos.length+' guardadas · '+pool.length+' sin participar</span>'+
@@ -472,7 +486,7 @@ function prepView(){
   }
   const modeLine=iv?'Salida individual: un palista cada '+lab(iv)+'.':'Salida conjunta: todos salen a la vez.';
   const gridPanel='<section class="panel"><div class="panel-head"><h2>Parrilla de salida</h2><span class="count">'+n+(n===1?' participante':' participantes')+'</span></div>'+
-    '<p class="hint">Sale primero la casilla de arriba a la izquierda y se sigue por filas, de izquierda a derecha. Arrastra las fotos a los huecos, o toca una foto y luego un hueco. Los huecos vacíos se saltan. '+modeLine+'</p>'+
+    '<p class="hint">Sale primero la casilla de arriba a la izquierda y se sigue por filas, de izquierda a derecha. Toca un hueco con + para elegir fotos de la biblioteca, arrastra las fotos a los huecos, o toca una foto y luego un hueco. Los huecos vacíos se saltan. '+modeLine+'</p>'+
     selbar+
     '<div class="grid4">'+slotsHtml+'</div>'+
     '<div class="row-actions"><button class="btn small ghost" data-act="fillAll"'+(pool.length?'':' disabled')+'>Colocar todas en orden</button>'+
@@ -510,7 +524,7 @@ function runView(){
 
   const gridPanel='<section class="panel"><div class="panel-head"><h2>Llegadas</h2><span class="count">Toca la foto de quien cruza la meta</span></div>'+
     '<div class="grid4">'+tiles+'</div>'+
-    '<div class="legend"><span><i class="dot go"></i>Le toca salir</span><span><i class="dot out"></i>En ruta</span><span><i class="dot in"></i>En meta</span></div>'+
+    '<div class="legend"><span><i class="dot go"></i>Siguiente en salir</span><span><i class="dot out"></i>En ruta</span><span><i class="dot in"></i>En meta</span></div>'+
     '<p class="foot">El número de cada foto es su orden de salida. El tiempo ya descuenta su salida escalonada.</p></section>';
 
   let rows;
@@ -531,12 +545,142 @@ function runView(){
   }
   const table='<section class="panel"><div class="panel-head"><h2>Resultados · '+S.distance+' m</h2></div>'+
     '<div class="tablewrap"><table class="res"><thead><tr><th>Pos</th><th>Palista</th><th>Día</th><th class="num">Tiempo</th><th class="num">Dif.</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-    '<div class="row-actions"><button class="btn small" data-act="copy"'+(sorted.length?'':' disabled')+'>Copiar resultados</button>'+
+    '<div class="season">'+seasonLine()+'</div>'+
+    '<div class="row-actions"><button class="btn small" data-act="saveSheet"'+(sorted.length&&!ui.saving&&!S.savedIn?'':' disabled')+'>'+(S.savedIn?'Guardado ✓':'Guardar')+'</button>'+
     '<button class="btn small ghost'+(ui.confirm==='reset'?' warn':'')+'" data-act="reset">'+(ui.confirm==='reset'?'¿Seguro? Se borran los tiempos':'Volver a preparar')+'</button></div>'+
     (ui.copyText?'<p class="hint">No se pudo copiar automáticamente. Selecciona este texto y cópialo:</p><textarea class="copybox" id="copyBox" readonly>'+esc(ui.copyText)+'</textarea>':'')+
     '</section>';
 
   return bar+'<div class="cols race">'+gridPanel+table+'</div>';
+}
+
+/* ---------- Ventanas ---------- */
+function modalView(){
+  const m=ui.modal; if(!m) return '';
+  let body='';
+  if(m.type==='rename'){
+    const p=P(m.id); if(!p){ui.modal=null; return '';}
+    body='<h3>Nombre del palista</h3>'+
+      '<div class="who"><img src="'+p.thumb+'" alt="" style="width:56px;height:70px"><input class="txt" id="modalInput" maxlength="40" autocomplete="off" value="'+esc(p.name)+'" aria-label="Nombre del palista"></div>'+
+      '<div class="row-actions"><button class="btn" data-act="saveName">Guardar nombre</button><button class="btn ghost" data-act="closeModal">Cancelar</button></div>';
+  }else if(m.type==='pick'){
+    const posOf={}; let r=0; S.slots.forEach(id=>{ if(id) posOf[id]=++r; });
+    const tiles=S.photos.map(p=>{
+      const k=m.chosen.indexOf(p.id), placed=posOf[p.id];
+      return '<div class="tile'+(k>=0?' sel':'')+(placed?' placed':'')+'" role="button" tabindex="0" data-act="pickToggle" data-id="'+p.id+'" aria-pressed="'+(k>=0)+'" aria-label="'+esc(p.name)+'">'+
+        '<div class="ph">'+img(p)+(k>=0?'<span class="badge">'+(k+1)+'º</span>':(placed?'<span class="badge">en parrilla '+placed+'</span>':''))+'</div>'+
+        '<div class="cap"><span>'+esc(p.name)+'</span></div></div>';
+    }).join('');
+    body='<h3>Elegir fotos para la parrilla</h3>'+
+      '<p class="hint">Toca las fotos en el orden en que deben salir. La primera va al hueco que has tocado y las demás a los siguientes huecos libres. Si eliges una que ya está en la parrilla, se cambia de sitio.</p>'+
+      '<div class="pickgrid">'+tiles+'</div>'+
+      '<div class="row-actions"><button class="btn" data-act="pickDone"'+(m.chosen.length?'':' disabled')+'>Colocar '+(m.chosen.length||'')+(m.chosen.length===1?' foto':' fotos')+'</button>'+
+      '<button class="btn ghost" data-act="pickFree">Elegir todas las libres</button>'+
+      '<button class="btn ghost" data-act="closeModal">Cancelar</button></div>';
+  }else if(m.type==='season'){
+    const cur=getSeason();
+    body='<h3>'+(m.then==='new'?'Nueva temporada':'Elegir temporada')+'</h3>'+
+      '<p class="hint">Los resultados se guardan en el archivo <b>temporadaXX.xlsx</b> de la carpeta '+esc(filesLocation())+'. Cada día de control es una hoja nueva con el nombre día-mes-año. Escribe lo que va en lugar de XX (por ejemplo 26 o 2026-27).</p>'+
+      (m.then==='new'&&cur?'<p class="hint">La temporada actual es <b>temporada'+esc(cur)+'</b>. Ese archivo se queda como está y los próximos resultados irán al nuevo.</p>':'')+
+      '<input class="txt" id="modalInput" maxlength="12" autocomplete="off" inputmode="text" value="'+esc(suggestSeason())+'" aria-label="Temporada">'+
+      '<div class="row-actions"><button class="btn" data-act="seasonOk">'+(m.then==='save'?'Crear y guardar':'Empezar temporada')+'</button><button class="btn ghost" data-act="closeModal">Cancelar</button></div>';
+  }
+  return '<div class="modal" role="dialog" aria-modal="true"><div class="backdrop" data-act="closeModal"></div><div class="sheet">'+body+'</div></div>';
+}
+function placeChosen(i,ids){
+  ids=ids.filter(id=>P(id)); if(!ids.length) return;
+  ids.forEach(unplace);
+  const order=[i];
+  for(let j=i+1;j<S.slots.length;j++) order.push(j);
+  for(let j=0;j<i;j++) order.push(j);
+  const free=order.filter(j=>!S.slots[j]);
+  ids.forEach((id,k)=>{ if(k<free.length) S.slots[free[k]]=id; else S.slots.push(id); });
+  ensureSlots();
+}
+
+/* ---------- Temporadas y hoja de cálculo ---------- */
+const SEASON_KEY='crono-temporada';
+function getSeason(){ try{ return localStorage.getItem(SEASON_KEY)||''; }catch(e){ return ''; } }
+function setSeason(v){ try{ localStorage.setItem(SEASON_KEY,v); }catch(e){} }
+function cleanSeason(v){ return String(v||'').trim().replace(/[^0-9A-Za-zÀ-ÿ_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,12); }
+function suggestSeason(){
+  const cur=getSeason();
+  if(!cur) return String(new Date().getFullYear()).slice(2);
+  return /^\d+$/.test(cur)?String(+cur+1).padStart(cur.length,'0'):cur;
+}
+const bridge=()=>window.CronosFiles||null;
+function filesLocation(){ try{ return bridge()?bridge().location():'Descargas'; }catch(e){ return 'Descargas'; } }
+function seasonLine(){
+  const cur=getSeason();
+  return '<span>'+(cur?'Archivo actual: <b>temporada'+esc(cur)+'.xlsx</b>':'Aún no hay temporada: se pedirá al guardar')+'</span>'+
+    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button>';
+}
+function seasonOk(){
+  const v=cleanSeason(($('#modalInput')||{}).value);
+  if(!v){ toast('Escribe la temporada, por ejemplo 26'); return; }
+  const then=ui.modal&&ui.modal.then;
+  setSeason(v); ui.modal=null; render();
+  if(then==='save') saveSheet();
+  else toast('Temporada '+v+': los próximos resultados se guardarán en temporada'+v+'.xlsx');
+}
+function sheetDay(d){ const p=String(d||'').split('-'); return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:String(d); }
+function b64ToBytes(b){ const s=atob(b), a=new Uint8Array(s.length); for(let i=0;i<s.length;i++) a[i]=s.charCodeAt(i); return a; }
+function readBook(name){
+  let b='';
+  try{ b=bridge()?bridge().read(name):(localStorage.getItem('crono-xlsx-'+name)||''); }catch(e){ b=''; }
+  if(!b) return null;
+  try{ return XLSX.read(b,{type:'base64'}); }catch(e){ return null; }
+}
+function writeBook(name,wb){
+  const b=XLSX.write(wb,{type:'base64',bookType:'xlsx'});
+  if(bridge()) return bridge().write(name,b);
+  /* Sin la app (navegador): se guarda una copia aquí y se descarga el archivo */
+  try{ localStorage.setItem('crono-xlsx-'+name,b); }catch(e){}
+  const url=URL.createObjectURL(new Blob([b64ToBytes(b)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+  return 'ok';
+}
+function resultRows(){
+  const sorted=S.results.slice().sort((a,b)=>a.net-b.net);
+  const head=S.distance+' m · '+fmtDayLong(S.day)+' · '+(S.runInterval>0?'salida individual cada '+lab(S.runInterval):'salida conjunta');
+  const rows=[[head],['Pos','Palista','Tiempo','Dif.','Salió','Segundos']];
+  sorted.forEach((r,i)=>rows.push([i+1,r.name,fmt(r.net),i===0?'':'+'+fmt(r.net-sorted[0].net),(r.rank+1)+'º',Math.round(r.net/10)/100]));
+  return rows;
+}
+async function saveSheet(){
+  if(!S.results.length) return;
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar el generador de hojas de cálculo'); return; }
+  const season=getSeason();
+  if(!season){ ui.modal={type:'season',then:'save',focus:true}; render(); return; }
+  const name='temporada'+season+'.xlsx', sheet=sheetDay(S.day);
+  ui.saving=true; render();
+  try{
+    const wb=readBook(name)||XLSX.utils.book_new();
+    const rows=resultRows();
+    let ws=wb.Sheets[sheet], row=0;
+    const blk=S.block&&S.block.file===name&&S.block.sheet===sheet?S.block:null;
+    if(ws&&blk){
+      /* Este mismo control ya se guardó: se sustituye su bloque por los tiempos corregidos */
+      for(let r=blk.row;r<blk.row+blk.len;r++) for(let c=0;c<6;c++) delete ws[XLSX.utils.encode_cell({r,c})];
+      XLSX.utils.sheet_add_aoa(ws,rows,{origin:{r:blk.row,c:0}});
+      row=blk.row;
+    }else if(ws){
+      /* Otro control del mismo día: se añade debajo, dejando una fila en blanco */
+      const end=ws['!ref']?XLSX.utils.decode_range(ws['!ref']).e.r:-2;
+      row=end+2;
+      XLSX.utils.sheet_add_aoa(ws,rows,{origin:{r:row,c:0}});
+    }else{
+      ws=XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols']=[{wch:5},{wch:24},{wch:10},{wch:10},{wch:7},{wch:9}];
+      XLSX.utils.book_append_sheet(wb,ws,sheet);
+    }
+    const res=writeBook(name,wb);
+    if(res==='ok'){ S.savedIn=name; S.block={file:name,sheet,row,len:Math.max(rows.length,blk?blk.len:0)}; save(); toast('Guardado en '+filesLocation()+'/'+name+' · hoja '+sheet); }
+    else if(res==='perm') toast('Permite el acceso al almacenamiento y vuelve a pulsar Guardar');
+    else toast('No se pudo guardar: '+String(res).replace(/^error:/,''));
+  }catch(e){ toast('No se pudo guardar la hoja de cálculo'); }
+  ui.saving=false; render();
 }
 
 /* ---------- Reloj ---------- */
@@ -554,11 +698,11 @@ function tick(){
 
 function render(){
   const y=window.scrollY;
-  app.innerHTML=S.phase==='prep'?prepView():runView();
+  app.innerHTML=(S.phase==='prep'?prepView():runView())+modalView();
   window.scrollTo(0,y);
   cancelAnimationFrame(raf); lastG=-2; tick();
   ui.flash=null;
-  if(ui.editing){const i=$('#renameInput'); if(i){i.focus(); i.select();}}
+  if(ui.modal&&ui.modal.focus){ui.modal.focus=false; const i=$('#modalInput'); if(i){i.focus(); i.select();}}
 }
 
 /* ---------- Acciones ---------- */
@@ -570,6 +714,7 @@ function arrive(id,t){
   const elapsed=t-S.startAt;
   const net=elapsed-rank*S.runInterval*1000;
   S.results.push({id:uid(),photoId:id,name:p?p.name:'Palista',rank,elapsed,net,day:S.day});
+  S.savedIn=null;
   ui.flash=id; save(); render();
   if(net<0) toast('Este palista aún no debería haber llegado: revisa la fila');
 }
@@ -592,7 +737,7 @@ function askConfirm(key){
   return false;
 }
 function saveRename(id,value){
-  const p=P(id); ui.editing=null;
+  const p=P(id); ui.editing=null; ui.modal=null;
   if(p){ const v=String(value||'').trim(); if(v){ p.name=v; store.put(p).catch(()=>{}); } }
   save(); render();
 }
@@ -607,6 +752,8 @@ function act(name,el,e){
       const i=+el.dataset.i;
       if(ui.sel){ place(ui.sel,i); ui.sel=null; save(); }
       else if(S.slots[i]){ ui.sel=S.slots[i]; }
+      else if(S.photos.length){ ui.modal={type:'pick',slot:i,chosen:[]}; }
+      else { toast('Primero añade fotos a la biblioteca'); }
       render(); break;
     }
     case 'desel': ui.sel=null; render(); break;
@@ -618,7 +765,7 @@ function act(name,el,e){
       if(ui.sel===id) ui.sel=null;
       ui.confirm=null; save(); render(); break;
     }
-    case 'rename': ui.editing=id; render(); break;
+    case 'rename': ui.sel=null; ui.modal={type:'rename',id,focus:true}; render(); break;
     case 'fillAll': {
       const free=S.photos.filter(p=>!S.slots.includes(p.id)); let k=0;
       for(let i=0;i<S.slots.length&&k<free.length;i++){ if(!S.slots[i]) S.slots[i]=free[k++].id; }
@@ -632,7 +779,7 @@ function act(name,el,e){
     case 'start': {
       const order=S.slots.filter(Boolean);
       if(!order.length) break;
-      S.order=order; S.runInterval=effInterval(); S.results=[];
+      S.order=order; S.runInterval=effInterval(); S.results=[]; S.savedIn=null; S.block=null;
       S.phase='running'; S.startAt=Date.now(); S.stoppedAt=null;
       ui.sel=null; ui.editing=null; ui.copyText=null; ui.confirm=null;
       save(); render(); window.scrollTo(0,0); break;
@@ -643,8 +790,23 @@ function act(name,el,e){
     }
     case 'stop': S.phase='done'; S.stoppedAt=Date.now(); save(); render(); break;
     case 'resume': S.phase='running'; S.stoppedAt=null; save(); render(); break;
-    case 'del': S.results=S.results.filter(r=>r.id!==el.dataset.rid); save(); render(); break;
-    case 'copy': copyResults(); break;
+    case 'del': S.results=S.results.filter(r=>r.id!==el.dataset.rid); S.savedIn=null; save(); render(); break;
+    case 'saveSheet': saveSheet(); break;
+    case 'newSeason': ui.modal={type:'season',then:'new',focus:true}; render(); break;
+    case 'closeModal': ui.modal=null; render(); break;
+    case 'saveName': saveRename(ui.modal&&ui.modal.id,($('#modalInput')||{}).value); break;
+    case 'pickToggle': {
+      const a=ui.modal.chosen, k=a.indexOf(id);
+      if(k>=0) a.splice(k,1); else a.push(id);
+      render(); break;
+    }
+    case 'pickFree': {
+      const a=ui.modal.chosen;
+      S.photos.forEach(p=>{ if(!S.slots.includes(p.id)&&!a.includes(p.id)) a.push(p.id); });
+      render(); break;
+    }
+    case 'pickDone': placeChosen(ui.modal.slot,ui.modal.chosen); ui.modal=null; save(); render(); break;
+    case 'seasonOk': seasonOk(); break;
     case 'reset':
       if(!askConfirm('reset')) break;
       S.phase='prep'; S.startAt=null; S.stoppedAt=null; S.order=[]; S.results=[]; S.day=today();
@@ -664,6 +826,11 @@ app.addEventListener('click',e=>{
 });
 app.addEventListener('keydown',e=>{
   const t=e.target;
+  if(t.id==='modalInput'){
+    if(e.key==='Enter'){e.preventDefault(); if(ui.modal.type==='rename') saveRename(ui.modal.id,t.value); else seasonOk();}
+    else if(e.key==='Escape'){ui.modal=null; render();}
+    return;
+  }
   if(t.id==='renameInput'){
     if(e.key==='Enter'){e.preventDefault(); saveRename(t.dataset.id,t.value);}
     else if(e.key==='Escape'){ui.editing=null; render();}

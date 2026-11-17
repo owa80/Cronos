@@ -59,6 +59,9 @@ class MainActivity : AppCompatActivity() {
             cacheMode = WebSettings.LOAD_DEFAULT
         }
 
+        // Guardar resultados en las hojas de cálculo de la temporada (Descargas/Cronos).
+        webView.addJavascriptInterface(SeasonFiles(this), "CronosFiles")
+
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
                 view: WebView?,
