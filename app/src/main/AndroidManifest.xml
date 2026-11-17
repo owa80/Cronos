@@ -3,6 +3,10 @@
 
     <!-- La app no usa internet: MainActivity bloquea cualquier petición que no sea a sus propios archivos. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Solo Android 9 o anterior: guardar las hojas de cálculo en Descargas/Cronos. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:allowBackup="true"
