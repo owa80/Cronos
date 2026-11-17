@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Crono Piragüismo</title>
+<style>
+:root{
+  /* Layout: barra de tiempo fija arriba. Preparación = ajustes, luego bandeja de fotos junto a la parrilla de 4 columnas.
+     Control = parrilla de llegadas junto a la tabla de resultados ordenada en vivo. */
+  --bg:#EDF2F4; --surface:#FFFFFF; --surface2:#E3EBEF; --ink:#0F2533; --muted:#556B7A; --line:#C9D6DD;
+  --accent:#0A6C80; --accent-ink:#FFFFFF;
+  --go:#1B7A49; --go-ink:#FFFFFF; --stop:#B3261E; --stop-ink:#FFFFFF;
+  --win:#FFF1C9;
+  --bar:#0F2533; --bar-ink:#F1F7F9;
+  --ov:rgba(10,28,40,.76); --ov-ink:#FFFFFF; --ov-in:rgba(150,28,22,.84);
+  --warn:#F2B705; --warn-ink:#2B2100;
+  --font-display:'Barlow Condensed','Arial Narrow','sans-serif-condensed',sans-serif;
+  --font-body:'Barlow',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#08141C; --surface:#0F2430; --surface2:#17313F; --ink:#E3EEF2; --muted:#8CA5B3; --line:#23414F;
+    --accent:#45C2D8; --accent-ink:#04212A;
+    --go:#3FB67C; --go-ink:#04210F; --stop:#F0746B; --stop-ink:#2A0705;
+    --win:#2F2A10;
+    --bar:#05101A; --bar-ink:#E9F3F6;
+    --ov:rgba(3,10,15,.78); --ov-in:rgba(125,24,20,.88);
+    --warn:#F5C84B; --warn-ink:#2B2100;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#08141C; --surface:#0F2430; --surface2:#17313F; --ink:#E3EEF2; --muted:#8CA5B3; --line:#23414F;
+  --accent:#45C2D8; --accent-ink:#04212A;
+  --go:#3FB67C; --go-ink:#04210F; --stop:#F0746B; --stop-ink:#2A0705;
+  --win:#2F2A10;
+  --bar:#05101A; --bar-ink:#E9F3F6;
+  --ov:rgba(3,10,15,.78); --ov-in:rgba(125,24,20,.88);
+  --warn:#F5C84B; --warn-ink:#2B2100;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:var(--font-body); font-size:15px; line-height:1.4;
+  padding-block:20px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  -webkit-text-size-adjust:100%;
+}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:20;background:var(--bg)}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+h2{font-family:var(--font-display);font-weight:600;font-size:22px;line-height:1.1;margin:0;letter-spacing:.01em}
+p{margin:0}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* Barra superior */
+.top{
+  position:sticky;top:env(safe-area-inset-top,0px);z-index:11;
+  background:var(--bar);color:var(--bar-ink);border-radius:6px;
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 14px;
+  border:1px solid var(--line);
+}
+.brand,.clockbox{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
+.brand-name{font-family:var(--font-display);font-weight:700;font-size:26px;line-height:1;letter-spacing:.01em}
+.sub{font-size:13px;opacity:.78}
+.clock{font-family:var(--font-display);font-weight:700;font-size:clamp(40px,11vw,58px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.top-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+.pill{font-size:13px;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid currentColor;opacity:.9;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* Botones */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  min-height:44px;padding:8px 16px;border-radius:6px;border:1px solid var(--accent);
+  background:var(--accent);color:var(--accent-ink);font-weight:600;text-decoration:none;
+}
+.btn.go{background:var(--go);border-color:var(--go);color:var(--go-ink)}
+.btn.stop{background:var(--stop);border-color:var(--stop);color:var(--stop-ink)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.small{min-height:36px;padding:4px 12px;font-size:14px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.warn{border-color:var(--stop);color:var(--stop);background:transparent}
+.top .btn.ghost{color:var(--bar-ink);border-color:rgba(255,255,255,.4)}
+
+/* Paneles */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.panel-head h2{margin-right:auto}
+.count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hint{font-size:14px;color:var(--muted);max-width:62ch}
+.cols{display:grid;gap:16px;grid-template-columns:minmax(0,1fr);align-items:start}
+@media (min-width:880px){
+  .cols.prep{grid-template-columns:minmax(0,1fr) minmax(0,480px)}
+  .cols.race{grid-template-columns:minmax(0,480px) minmax(0,1fr)}
+}
+
+/* Ajustes */
+.settings{display:flex;flex-wrap:wrap;gap:14px 28px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{min-height:42px;padding:6px 13px;border-radius:6px;border:1px solid var(--line);background:var(--surface);font-weight:500;font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+select,input[type=date],input[type=number]{
+  font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;min-height:42px;padding:6px 10px;
+}
+input[type=number]{width:90px}
+.unit{color:var(--muted);font-size:14px}
+
+/* Fotos */
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+.vh:focus-visible + label.btn{outline:3px solid var(--accent);outline-offset:2px}
+.pool{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;min-height:120px;padding:8px;border:1px dashed var(--line);border-radius:6px;background:var(--surface2)}
+.pool.over,.slot.over{outline:3px solid var(--accent);outline-offset:-2px}
+.empty-note{grid-column:1/-1;align-self:center;text-align:center;color:var(--muted);font-size:14px;padding:12px}
+
+.tile{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-width:0;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.tile[draggable="true"]{cursor:grab}
+.tile.dragging{opacity:.4}
+.ph{position:relative;aspect-ratio:4/5;background:var(--surface2);max-width:100%}
+.ph img{display:block;width:100%;height:100%;object-fit:cover;object-position:50% 25%;pointer-events:none}
+.badge{position:absolute;left:4px;top:4px;background:var(--bar);color:var(--bar-ink);font-size:11px;font-weight:600;line-height:1;padding:4px 6px;border-radius:4px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.x{position:absolute;right:3px;top:3px;width:26px;height:26px;border-radius:50%;border:0;background:var(--ov);color:var(--ov-ink);font-size:16px;line-height:1;padding:0}
+.x.confirm{width:auto;height:26px;border-radius:13px;padding:0 9px;background:var(--stop);color:var(--stop-ink);font-size:12px;font-weight:600}
+.notice{font-size:13px;color:var(--stop);font-weight:500}
+.cap{display:flex;align-items:center;justify-content:center;gap:2px;padding:3px 3px 4px;min-height:30px;font-size:12px;font-weight:500;min-width:0}
+.cap span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ed{flex:none;width:24px;height:24px;border:0;background:transparent;color:var(--muted);padding:0;font-size:14px}
+.rename{width:100%;min-width:0;min-height:26px;font:inherit;font-size:12px;padding:2px 4px;border:1px solid var(--accent);border-radius:4px;background:var(--surface);color:var(--ink)}
+.tile-sel,.sel > .tile,.tile.sel{outline:3px solid var(--accent);outline-offset:-1px}
+
+/* Parrilla */
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.slot{min-width:0;border-radius:6px}
+.slot.empty{min-height:104px;border:2px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:22px;background:transparent}
+.slot.sel{outline:3px solid var(--accent);outline-offset:1px}
+.selbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 10px;border-radius:6px;background:var(--surface2);font-size:14px}
+.selbar .grow{margin-right:auto}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px}
+
+/* Llegadas */
+.arr{touch-action:manipulation}
+.arr[data-act="arrive"]{cursor:pointer;border-color:var(--accent);border-width:2px}
+.arr[data-act="arrive"]:active{transform:scale(.97)}
+.arr.locked{opacity:.55}
+.ov{position:absolute;inset:0;background:var(--ov);color:var(--ov-ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.ov b{font-family:var(--font-display);font-size:30px;line-height:1;font-weight:700}
+.ov small{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+/* Estado de salida: verde = le toca salir, amarillo = en ruta, rojo = en meta */
+.st{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;text-align:center;padding:3px 2px;background:var(--surface2);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.arr.st-go{--c:var(--go)}
+.tile.arr.st-out{--c:var(--warn)}
+.tile.arr.st-in{--c:var(--stop)}
+.tile.arr.st-go,.tile.arr.st-out,.tile.arr.st-in{border-color:var(--c);box-shadow:0 0 0 3px var(--c)}
+.st-go .st{background:var(--go);color:var(--go-ink)}
+.st-out .st{background:var(--warn);color:var(--warn-ink)}
+.st-in .st{background:var(--stop);color:var(--stop-ink)}
+.arrived .st{text-transform:none;letter-spacing:0;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block}
+.dot.go{background:var(--go)}.dot.out{background:var(--warn)}.dot.in{background:var(--stop)}
+.flash{animation:flash .9s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 4px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
+@media (prefers-reduced-motion:reduce){.flash{animation:none}.arr[data-act="arrive"]:active{transform:none}}
+
+/* Tabla */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+.res th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:8px 8px;background:var(--surface2);white-space:nowrap}
+.res td{padding:7px 8px;border-top:1px solid var(--line);white-space:nowrap}
+.res .num{text-align:right}
+.res tr.win td{background:var(--win)}
+.res tr.flash td{animation:rowflash .9s ease-out}
+@keyframes rowflash{0%{background:var(--accent);color:var(--accent-ink)}100%{}}
+@media (prefers-reduced-motion:reduce){.res tr.flash td{animation:none}}
+.pos{font-family:var(--font-display);font-weight:700;font-size:20px;line-height:1}
+.who{display:flex;align-items:center;gap:8px;min-width:0}
+.who img{width:28px;height:34px;object-fit:cover;object-position:50% 25%;border-radius:3px;flex:none}
+.who .nm{display:flex;flex-direction:column;min-width:0;line-height:1.15}
+.who .nm b{font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.who .nm small{color:var(--muted);font-size:11px}
+.time{font-weight:700;font-size:15px}
+.diff{color:var(--muted)}
+.flagged{color:var(--stop);font-size:11px;font-weight:600}
+.del{width:28px;height:28px;border:0;background:transparent;color:var(--muted);font-size:18px;line-height:1;padding:0;border-radius:4px}
+.copybox{width:100%;min-height:120px;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+.foot{font-size:12px;color:var(--muted)}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--bar);color:var(--bar-ink);padding:10px 16px;border-radius:6px;font-size:14px;max-width:calc(100% - 32px);border:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+const KEY='crono-piraguismo-v1';
+const DISTANCES=[200,500,1000,1500,3000];
+const PRESETS=[30,60,15,45,90,120];
+
+const $=s=>document.querySelector(s);
+const app=$('#app');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
+function today(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function fmtDay(s){const p=String(s||'').split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0].slice(2):s;}
+function fmtDayLong(s){const p=String(s||'').split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s;}
+function fmt(ms){
+  const neg=ms<0; ms=Math.abs(ms);
+  const cs=Math.floor(ms/10)%100, s=Math.floor(ms/1000)%60, m=Math.floor(ms/60000);
+  return (neg?'−':'')+m+':'+pad(s)+'.'+pad(cs);
+}
+function fmtOff(sec){return Math.floor(sec/60)+':'+pad(sec%60);}
+function lab(sec){
+  if(sec<60) return sec+'″';
+  const m=Math.floor(sec/60), s=sec%60;
+  return m+'′'+(s?s+'″':'');
+}
+
+function fresh(){
+  return {photos:[],slots:[],mode:'individual',interval:30,distance:500,day:today(),
+    phase:'prep',startAt:null,stoppedAt:null,order:[],runInterval:0,results:[]};
+}
+function load(){
+  try{
+    const raw=localStorage.getItem(KEY); if(!raw) return null;
+    const s=JSON.parse(raw);
+    if(!s||!Array.isArray(s.photos)||!Array.isArray(s.slots)||!Array.isArray(s.results)||!Array.isArray(s.order)) return null;
+    const f=fresh(); for(const k in f){ if(s[k]===undefined) s[k]=f[k]; }
+    if(s.phase==='prep') s.day=today();
+    return s;
+  }catch(e){return null;}
+}
+/* Las fotos viven en la biblioteca (store); aquí solo se guarda el estado del control */
+function save(){ try{ localStorage.setItem(KEY,JSON.stringify(Object.assign({},S,{photos:[]}))); }catch(e){} }
+
+let S=load()||fresh();
+const ui={sel:null,editing:null,confirm:null,flash:null,customInterval:false,copyText:null};
+let raf=0, toastT=0, down=null, ordN=0, lastG=-2;
+
+/* Estados de la parrilla de llegadas durante el control */
+const ST_TEXT={go:'Sale ya',out:'En ruta',idle:'Espera','in':'En meta'};
+function stateFor(rank,elapsed){
+  const iv=S.runInterval*1000;
+  if(!iv) return 'out';
+  const g=Math.floor(elapsed/iv);
+  return rank<g?'out':(rank===g?'go':'idle');
+}
+function applyStates(elapsed){
+  const iv=S.runInterval*1000, g=iv?Math.floor(elapsed/iv):-1;
+  if(g===lastG) return;
+  lastG=g;
+  document.querySelectorAll('.arr[data-rank]').forEach(t=>{
+    if(t.classList.contains('arrived')) return;
+    const s=stateFor(+t.dataset.rank,elapsed);
+    t.classList.remove('st-go','st-out','st-idle'); t.classList.add('st-'+s);
+    const el=t.querySelector('.st'); if(el) el.textContent=ST_TEXT[s];
+  });
+}
+function nextInfo(elapsed){
+  const iv=S.runInterval*1000, n=S.order.length;
+  if(!iv) return 'Salida conjunta: todos en ruta';
+  const g=Math.floor(elapsed/iv);
+  if(g>=n) return 'Todos han salido';
+  const p=P(S.order[g]);
+  return 'Sale ahora: '+(p?p.name:'')+(g<n-1?' · siguiente en '+lab(Math.ceil((iv-(elapsed%iv))/1000)):' · última salida');
+}
+
+/* Biblioteca de fotos: IndexedDB; si no está disponible, localStorage; si tampoco, solo memoria */
+const store=(()=>{
+  const LSK='crono-piraguismo-photos'; let db=null, mode='mem';
+  const done=tx=>new Promise((res,rej)=>{tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error);});
+  const lsAll=()=>{try{return JSON.parse(localStorage.getItem(LSK)||'[]');}catch(e){return [];}};
+  return {
+    get mode(){return mode;},
+    async init(){
+      try{
+        if(!window.indexedDB) throw new Error('noidb');
+        db=await new Promise((res,rej)=>{
+          const r=indexedDB.open('crono-piraguismo',1);
+          r.onupgradeneeded=()=>r.result.createObjectStore('photos',{keyPath:'id'});
+          r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); r.onblocked=()=>rej(new Error('blocked'));
+        });
+        mode='idb';
+      }catch(e){
+        db=null;
+        try{ localStorage.getItem(LSK); mode='ls'; }catch(e2){ mode='mem'; }
+      }
+    },
+    async all(){
+      if(mode==='idb') return new Promise((res,rej)=>{const r=db.transaction('photos').objectStore('photos').getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+      if(mode==='ls') return lsAll();
+      return [];
+    },
+    async put(rec){
+      if(mode==='idb'){const tx=db.transaction('photos','readwrite');tx.objectStore('photos').put(rec);return done(tx);}
+      if(mode==='ls'){const a=lsAll();const i=a.findIndex(x=>x.id===rec.id);if(i>=0)a[i]=rec;else a.push(rec);localStorage.setItem(LSK,JSON.stringify(a));return;}
+      throw new Error('mem');
+    },
+    async del(id){
+      if(mode==='idb'){const tx=db.transaction('photos','readwrite');tx.objectStore('photos').delete(id);return done(tx);}
+      if(mode==='ls'){localStorage.setItem(LSK,JSON.stringify(lsAll().filter(x=>x.id!==id)));}
+    },
+    async clear(){
+      if(mode==='idb'){const tx=db.transaction('photos','readwrite');tx.objectStore('photos').clear();return done(tx);}
+      if(mode==='ls'){localStorage.removeItem(LSK);}
+    }
+  };
+})();
+
+const P=id=>S.photos.find(p=>p.id===id);
+const effInterval=()=>S.mode==='conjunta'?0:S.interval;
+
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.hidden=false;
+  clearTimeout(toastT); toastT=setTimeout(()=>{t.hidden=true;},2400);
+}
+
+/* ---------- Parrilla ---------- */
+function ensureSlots(){
+  const ids=new Set(S.photos.map(p=>p.id));
+  S.slots=S.slots.map(id=>ids.has(id)?id:null);
+  const n=Math.max(4,Math.ceil(S.photos.length/4)*4);
+  if(S.slots.length>n){
+    const f=S.slots.filter(Boolean);
+    S.slots=f.concat(new Array(Math.max(0,n-f.length)).fill(null));
+  }
+  while(S.slots.length<n) S.slots.push(null);
+}
+function rankMap(){const m={};let r=0;S.slots.forEach(id=>{if(id){m[id]=r++;}});return m;}
+function place(id,i){
+  if(!P(id)) return;
+  const j=S.slots.indexOf(id), other=S.slots[i];
+  if(other===id) return;
+  if(j>=0) S.slots[j]=other||null;
+  S.slots[i]=id;
+}
+function unplace(id){const j=S.slots.indexOf(id);if(j>=0)S.slots[j]=null;}
+
+/* ---------- Fotos ---------- */
+function nameFromFile(f){
+  let n=f.name.replace(/\.[^.]+$/,'').replace(/[_\-]+/g,' ').replace(/\s+/g,' ').trim();
+  return n||'Palista';
+}
+function loadThumb(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{
+      const max=240, k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+      const w=Math.max(1,Math.round(img.naturalWidth*k)), h=Math.max(1,Math.round(img.naturalHeight*k));
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      res(c.toDataURL('image/jpeg',0.78));
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('img'));};
+    img.src=url;
+  });
+}
+async function addFiles(list){
+  if(S.phase!=='prep') return;
+  const imgs=[...list].filter(f=>f.type&&f.type.startsWith('image/'))
+    .sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+  if(!imgs.length){toast('No se ha encontrado ninguna imagen');return;}
+  const known=new Set(S.photos.map(p=>p.sig).filter(Boolean));
+  const files=[]; let dup=0;
+  for(const f of imgs){
+    const sig=f.name+'|'+f.size+'|'+f.lastModified;
+    if(known.has(sig)){dup++;continue;}
+    known.add(sig); files.push({f,sig});
+  }
+  if(!files.length){toast('Esas fotos ya estaban cargadas');return;}
+  toast('Cargando '+files.length+(files.length===1?' foto…':' fotos…'));
+  let ok=0, unsaved=0;
+  for(const x of files){
+    try{
+      const thumb=await loadThumb(x.f);
+      const rec={id:uid(),name:nameFromFile(x.f),thumb,sig:x.sig,ord:++ordN};
+      try{ await store.put(rec); }catch(e){ unsaved++; }
+      S.photos.push(rec); ok++;
+    }catch(e){}
+  }
+  try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(()=>{}); }catch(e){}
+  save(); render();
+  let msg=ok+(ok===1?' foto guardada':' fotos guardadas');
+  if(dup) msg+=' · '+dup+(dup===1?' ya estaba':' ya estaban');
+  if(unsaved) msg=ok+' cargadas, pero '+unsaved+' no se pudieron guardar en este navegador';
+  toast(msg);
+}
+
+/* ---------- Plantillas ---------- */
+function caption(p){
+  if(ui.editing===p.id){
+    return '<div class="cap"><input class="rename" id="renameInput" data-id="'+p.id+'" maxlength="40" value="'+esc(p.name)+'" aria-label="Nombre del palista"></div>';
+  }
+  return '<div class="cap"><span>'+esc(p.name)+'</span><button class="ed" data-act="rename" data-id="'+p.id+'" aria-label="Editar nombre de '+esc(p.name)+'">✎</button></div>';
+}
+function img(p){return '<img src="'+p.thumb+'" alt="'+esc(p.name)+'" draggable="false">';}
+
+function prepView(){
+  ensureSlots();
+  const placedIds=new Set(S.slots.filter(Boolean));
+  const pool=S.photos.filter(p=>!placedIds.has(p.id));
+  const ranks=rankMap();
+  const n=placedIds.size, iv=effInterval();
+  const custom=ui.customInterval||!PRESETS.includes(S.interval);
+
+  const bar='<header class="top"><div class="brand"><span class="brand-name">Crono Piragüismo</span>'+
+    '<span class="sub">Preparación · '+n+(n===1?' participa':' participan')+'</span></div>'+
+    '<div class="top-right"><button class="btn go" data-act="start"'+(n?'':' disabled')+'>Iniciar salida</button></div></header>';
+
+  const dist=DISTANCES.map(d=>'<button class="chip" aria-pressed="'+(S.distance===d)+'" data-act="dist" data-v="'+d+'">'+d+' m</button>').join('');
+  const modes='<button class="chip" aria-pressed="'+(S.mode==='individual')+'" data-act="mode" data-v="individual">Individual</button>'+
+    '<button class="chip" aria-pressed="'+(S.mode==='conjunta')+'" data-act="mode" data-v="conjunta">Salida conjunta</button>';
+  let ivField='';
+  if(S.mode==='individual'){
+    ivField='<div class="field"><label class="lbl" for="interval">Intervalo entre palistas</label><div class="inline">'+
+      '<select id="interval">'+PRESETS.map(s=>'<option value="'+s+'"'+(!custom&&S.interval===s?' selected':'')+'>'+lab(s)+'</option>').join('')+
+      '<option value="custom"'+(custom?' selected':'')+'>Otro…</option></select>'+
+      (custom?'<input type="number" id="intervalCustom" min="1" max="600" step="1" inputmode="numeric" value="'+S.interval+'" aria-label="Intervalo en segundos"><span class="unit">segundos</span>':'')+
+      '</div></div>';
+  }
+  const settings='<section class="panel"><h2>Control</h2><div class="settings">'+
+    '<div class="field"><span class="lbl">Distancia</span><div class="chips">'+dist+'</div></div>'+
+    '<div class="field"><span class="lbl">Tipo de salida</span><div class="chips">'+modes+'</div></div>'+
+    ivField+
+    '<div class="field"><label class="lbl" for="day">Día</label><input type="date" id="day" value="'+esc(S.day)+'"></div>'+
+    '</div></section>';
+
+  const poolTiles=pool.map(p=>
+    '<div class="tile'+(ui.sel===p.id?' sel':'')+'" role="button" tabindex="0" draggable="'+(ui.editing===p.id?'false':'true')+'" data-drag="'+p.id+'" data-act="pick" data-id="'+p.id+'" aria-label="'+esc(p.name)+'">'+
+    '<div class="ph">'+img(p)+(ui.confirm==='rm:'+p.id
+      ?'<button class="x confirm" data-act="remove" data-id="'+p.id+'" aria-label="Confirmar: borrar la foto de '+esc(p.name)+' de la biblioteca">Borrar</button>'
+      :'<button class="x" data-act="remove" data-id="'+p.id+'" aria-label="Borrar la foto de '+esc(p.name)+' de la biblioteca">×</button>')+'</div>'+caption(p)+'</div>'
+  ).join('');
+  let poolInner=poolTiles;
+  if(!S.photos.length) poolInner='<div class="empty-note">Aún no hay fotos. Cárgalas una sola vez con «Añadir fotos» y quedarán guardadas. El nombre se toma del nombre del archivo y se puede cambiar con ✎.</div>';
+  else if(!pool.length) poolInner='<div class="empty-note">Todas las fotos están en la parrilla. Suelta aquí una foto para sacarla del control.</div>';
+
+  const photosPanel='<section class="panel"><div class="panel-head"><h2>Biblioteca de fotos</h2><span class="count">'+S.photos.length+' guardadas · '+pool.length+' sin participar</span>'+
+    '<input class="vh" type="file" id="files" accept="image/*" multiple><label class="btn small" for="files">Añadir fotos</label>'+
+    (S.photos.length?'<button class="btn small ghost'+(ui.confirm==='clearAll'?' warn':'')+'" data-act="clearAll">'+(ui.confirm==='clearAll'?'¿Seguro? Se borran todas':'Vaciar biblioteca')+'</button>':'')+
+    '</div><p class="hint">Cada foto se carga una sola vez y queda guardada en este dispositivo para los próximos controles. Las que dejes en esta bandeja no participan en el control; la × las borra de la biblioteca.</p>'+
+    (store.mode==='mem'?'<p class="notice">Este navegador no permite guardar las fotos: tendrás que cargarlas de nuevo la próxima vez.</p>':'')+
+    '<div class="pool" data-pool>'+poolInner+'</div></section>';
+
+  const slotsHtml=S.slots.map((id,i)=>{
+    if(!id) return '<div class="slot empty" role="button" tabindex="0" data-slot="'+i+'" data-act="slot" data-i="'+i+'" aria-label="Hueco libre">+</div>';
+    const p=P(id), r=ranks[id];
+    return '<div class="slot filled'+(ui.sel===id?' sel':'')+'" role="button" tabindex="0" data-slot="'+i+'" data-act="slot" data-i="'+i+'" aria-label="'+esc(p.name)+', salida número '+(r+1)+'">'+
+      '<div class="tile" draggable="'+(ui.editing===id?'false':'true')+'" data-drag="'+id+'">'+
+      '<div class="ph">'+img(p)+'<span class="badge">'+(r+1)+(iv?' · '+fmtOff(r*iv):'')+'</span></div>'+caption(p)+'</div></div>';
+  }).join('');
+
+  let selbar='';
+  if(ui.sel&&P(ui.sel)){
+    const isPlaced=S.slots.includes(ui.sel);
+    selbar='<div class="selbar"><span class="grow">Seleccionada: <b>'+esc(P(ui.sel).name)+'</b>. Toca un hueco de la parrilla.</span>'+
+      (isPlaced?'<button class="btn small ghost" data-act="toPool">Devolver a la bandeja</button>':'')+
+      '<button class="btn small ghost" data-act="desel">Cancelar</button></div>';
+  }
+  const modeLine=iv?'Salida individual: un palista cada '+lab(iv)+'.':'Salida conjunta: todos salen a la vez.';
+  const gridPanel='<section class="panel"><div class="panel-head"><h2>Parrilla de salida</h2><span class="count">'+n+(n===1?' participante':' participantes')+'</span></div>'+
+    '<p class="hint">Sale primero la casilla de arriba a la izquierda y se sigue por filas, de izquierda a derecha. Arrastra las fotos a los huecos, o toca una foto y luego un hueco. Los huecos vacíos se saltan. '+modeLine+'</p>'+
+    selbar+
+    '<div class="grid4">'+slotsHtml+'</div>'+
+    '<div class="row-actions"><button class="btn small ghost" data-act="fillAll"'+(pool.length?'':' disabled')+'>Colocar todas en orden</button>'+
+    '<button class="btn small ghost" data-act="clearGrid"'+(n?'':' disabled')+'>Vaciar parrilla</button></div></section>';
+
+  return bar+settings+'<div class="cols prep">'+photosPanel+gridPanel+'</div>'+
+    '<p class="foot">Las fotos, la parrilla y el control en curso se guardan en este navegador, así que puedes recargar la página sin perderlos. Si borras los datos del navegador, habrá que volver a cargar las fotos.</p>';
+}
+
+function runView(){
+  const running=S.phase==='running';
+  const elapsedNow=running?Date.now()-S.startAt:S.stoppedAt-S.startAt;
+  const sorted=S.results.slice().sort((a,b)=>a.net-b.net);
+  const posOf={}; sorted.forEach((r,i)=>{posOf[r.photoId]=i+1;});
+  const resOf={}; S.results.forEach(r=>{resOf[r.photoId]=r;});
+  const total=S.order.length, arrived=S.results.length;
+  const modeText=S.runInterval>0?'salida individual cada '+lab(S.runInterval):'salida conjunta';
+
+  const bar='<header class="top"><div class="clockbox"><div class="clock" id="clock">0:00.00</div>'+
+    '<div class="sub">'+S.distance+' m · '+fmtDayLong(S.day)+' · '+modeText+(running?'':' · crono detenido')+'</div>'+
+    '<div class="sub" id="nextinfo"></div></div>'+
+    '<div class="top-right"><span class="pill">'+arrived+' / '+total+' en meta</span>'+
+    (running?'<button class="btn stop" data-act="stop">Terminar</button>':'<button class="btn ghost" data-act="resume">Reanudar crono</button>')+
+    '</div></header>';
+
+  const tiles=S.order.map((id,i)=>{
+    const p=P(id); if(!p) return '';
+    const r=resOf[id];
+    const s=r?'in':stateFor(i,elapsedNow);
+    const cls='tile arr st-'+s+(r?' arrived':'')+(!r&&!running?' locked':'')+(ui.flash===id?' flash':'');
+    const attrs=' data-rank="'+i+'"'+((!r&&running)?' role="button" tabindex="0" data-act="arrive" data-id="'+id+'" aria-label="Llegada de '+esc(p.name)+'"':'');
+    return '<div class="'+cls+'"'+attrs+'><div class="ph">'+img(p)+'<span class="badge">'+(i+1)+'</span>'+
+      '</div><div class="st">'+(r?posOf[id]+'º '+fmt(r.net):ST_TEXT[s])+'</div><div class="cap"><span>'+esc(p.name)+'</span></div></div>';
+  }).join('');
+
+  const gridPanel='<section class="panel"><div class="panel-head"><h2>Llegadas</h2><span class="count">Toca la foto de quien cruza la meta</span></div>'+
+    '<div class="grid4">'+tiles+'</div>'+
+    '<div class="legend"><span><i class="dot go"></i>Le toca salir</span><span><i class="dot out"></i>En ruta</span><span><i class="dot in"></i>En meta</span></div>'+
+    '<p class="foot">El número de cada foto es su orden de salida. El tiempo ya descuenta su salida escalonada.</p></section>';
+
+  let rows;
+  if(!sorted.length){
+    rows='<tr><td colspan="6" style="white-space:normal;color:var(--muted);padding:16px">Todavía no ha llegado nadie. Cada llegada aparecerá aquí, ordenada de menor a mayor tiempo.</td></tr>';
+  }else{
+    const best=sorted[0].net;
+    rows=sorted.map((r,i)=>{
+      const p=P(r.photoId);
+      return '<tr class="'+(i===0?'win':'')+(ui.flash===r.photoId?' flash':'')+'">'+
+        '<td><span class="pos">'+(i+1)+'</span></td>'+
+        '<td><div class="who">'+(p?'<img src="'+p.thumb+'" alt="">':'')+'<div class="nm"><b>'+esc(r.name)+'</b><small>salió el '+(r.rank+1)+'º'+(r.net<0?' · <span class="flagged">revisar</span>':'')+'</small></div></div></td>'+
+        '<td>'+fmtDay(r.day)+'</td>'+
+        '<td class="num time">'+fmt(r.net)+'</td>'+
+        '<td class="num diff">'+(i===0?'—':'+'+fmt(r.net-best))+'</td>'+
+        '<td><button class="del" data-act="del" data-rid="'+r.id+'" aria-label="Quitar la llegada de '+esc(r.name)+'">×</button></td></tr>';
+    }).join('');
+  }
+  const table='<section class="panel"><div class="panel-head"><h2>Resultados · '+S.distance+' m</h2></div>'+
+    '<div class="tablewrap"><table class="res"><thead><tr><th>Pos</th><th>Palista</th><th>Día</th><th class="num">Tiempo</th><th class="num">Dif.</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div class="row-actions"><button class="btn small" data-act="copy"'+(sorted.length?'':' disabled')+'>Copiar resultados</button>'+
+    '<button class="btn small ghost'+(ui.confirm==='reset'?' warn':'')+'" data-act="reset">'+(ui.confirm==='reset'?'¿Seguro? Se borran los tiempos':'Volver a preparar')+'</button></div>'+
+    (ui.copyText?'<p class="hint">No se pudo copiar automáticamente. Selecciona este texto y cópialo:</p><textarea class="copybox" id="copyBox" readonly>'+esc(ui.copyText)+'</textarea>':'')+
+    '</section>';
+
+  return bar+'<div class="cols race">'+gridPanel+table+'</div>';
+}
+
+/* ---------- Reloj ---------- */
+function tick(){
+  const el=$('#clock');
+  const t=S.phase==='running'?Date.now()-S.startAt:(S.phase==='done'?S.stoppedAt-S.startAt:0);
+  if(el) el.textContent=fmt(t);
+  if(S.phase!=='prep'){
+    applyStates(t);
+    const ni=$('#nextinfo');
+    if(ni){ const s=S.phase==='running'?nextInfo(t):''; if(ni.textContent!==s) ni.textContent=s; }
+  }
+  if(S.phase==='running') raf=requestAnimationFrame(tick);
+}
+
+function render(){
+  const y=window.scrollY;
+  app.innerHTML=S.phase==='prep'?prepView():runView();
+  window.scrollTo(0,y);
+  cancelAnimationFrame(raf); lastG=-2; tick();
+  ui.flash=null;
+  if(ui.editing){const i=$('#renameInput'); if(i){i.focus(); i.select();}}
+}
+
+/* ---------- Acciones ---------- */
+function arrive(id,t){
+  if(S.phase!=='running') return;
+  if(S.results.some(r=>r.photoId===id)){toast('Ya está registrado');return;}
+  const rank=S.order.indexOf(id); if(rank<0) return;
+  const p=P(id);
+  const elapsed=t-S.startAt;
+  const net=elapsed-rank*S.runInterval*1000;
+  S.results.push({id:uid(),photoId:id,name:p?p.name:'Palista',rank,elapsed,net,day:S.day});
+  ui.flash=id; save(); render();
+  if(net<0) toast('Este palista aún no debería haber llegado: revisa la fila');
+}
+function resultsText(){
+  const sorted=S.results.slice().sort((a,b)=>a.net-b.net);
+  const head=S.distance+' m · '+fmtDayLong(S.day)+' · '+(S.runInterval>0?'salida individual cada '+lab(S.runInterval):'salida conjunta');
+  const lines=['Pos\tPalista\tDía\tTiempo\tDif.'];
+  sorted.forEach((r,i)=>lines.push((i+1)+'\t'+r.name+'\t'+fmtDayLong(r.day)+'\t'+fmt(r.net)+'\t'+(i===0?'—':'+'+fmt(r.net-sorted[0].net))));
+  return head+'\n'+lines.join('\n');
+}
+async function copyResults(){
+  const txt=resultsText();
+  try{ await navigator.clipboard.writeText(txt); ui.copyText=null; toast('Resultados copiados'); }
+  catch(e){ ui.copyText=txt; render(); setTimeout(()=>{const b=$('#copyBox'); if(b){b.focus(); b.select();}},0); }
+}
+function askConfirm(key){
+  if(ui.confirm===key) return true;
+  ui.confirm=key; render();
+  setTimeout(()=>{ if(ui.confirm===key){ui.confirm=null; render();} },4000);
+  return false;
+}
+function saveRename(id,value){
+  const p=P(id); ui.editing=null;
+  if(p){ const v=String(value||'').trim(); if(v){ p.name=v; store.put(p).catch(()=>{}); } }
+  save(); render();
+}
+
+function act(name,el,e){
+  const id=el.dataset.id;
+  switch(name){
+    case 'dist': S.distance=+el.dataset.v; save(); render(); break;
+    case 'mode': S.mode=el.dataset.v; save(); render(); break;
+    case 'pick': ui.sel=(ui.sel===id)?null:id; render(); break;
+    case 'slot': {
+      const i=+el.dataset.i;
+      if(ui.sel){ place(ui.sel,i); ui.sel=null; save(); }
+      else if(S.slots[i]){ ui.sel=S.slots[i]; }
+      render(); break;
+    }
+    case 'desel': ui.sel=null; render(); break;
+    case 'toPool': if(ui.sel) unplace(ui.sel); ui.sel=null; save(); render(); break;
+    case 'remove': {
+      if(!askConfirm('rm:'+id)) break;
+      unplace(id); S.photos=S.photos.filter(p=>p.id!==id);
+      store.del(id).catch(()=>{});
+      if(ui.sel===id) ui.sel=null;
+      ui.confirm=null; save(); render(); break;
+    }
+    case 'rename': ui.editing=id; render(); break;
+    case 'fillAll': {
+      const free=S.photos.filter(p=>!S.slots.includes(p.id)); let k=0;
+      for(let i=0;i<S.slots.length&&k<free.length;i++){ if(!S.slots[i]) S.slots[i]=free[k++].id; }
+      save(); render(); break;
+    }
+    case 'clearGrid': S.slots=S.slots.map(()=>null); ui.sel=null; save(); render(); break;
+    case 'clearAll':
+      if(!askConfirm('clearAll')) break;
+      S.photos=[]; S.slots=[]; ui.sel=null; ui.confirm=null;
+      store.clear().catch(()=>{}); save(); render(); break;
+    case 'start': {
+      const order=S.slots.filter(Boolean);
+      if(!order.length) break;
+      S.order=order; S.runInterval=effInterval(); S.results=[];
+      S.phase='running'; S.startAt=Date.now(); S.stoppedAt=null;
+      ui.sel=null; ui.editing=null; ui.copyText=null; ui.confirm=null;
+      save(); render(); window.scrollTo(0,0); break;
+    }
+    case 'arrive': {
+      const t=(down&&down.id===id&&Date.now()-down.t<2000)?down.t:Date.now();
+      down=null; arrive(id,t); break;
+    }
+    case 'stop': S.phase='done'; S.stoppedAt=Date.now(); save(); render(); break;
+    case 'resume': S.phase='running'; S.stoppedAt=null; save(); render(); break;
+    case 'del': S.results=S.results.filter(r=>r.id!==el.dataset.rid); save(); render(); break;
+    case 'copy': copyResults(); break;
+    case 'reset':
+      if(!askConfirm('reset')) break;
+      S.phase='prep'; S.startAt=null; S.stoppedAt=null; S.order=[]; S.results=[]; S.day=today();
+      ui.confirm=null; ui.copyText=null; save(); render(); window.scrollTo(0,0); break;
+  }
+}
+
+/* ---------- Eventos ---------- */
+app.addEventListener('pointerdown',e=>{
+  const el=e.target.closest('[data-act="arrive"]');
+  if(el) down={id:el.dataset.id,t:Date.now()};
+});
+app.addEventListener('click',e=>{
+  if(e.target.matches('input,select,textarea')) return;
+  const el=e.target.closest('[data-act]');
+  if(el) act(el.dataset.act,el,e);
+});
+app.addEventListener('keydown',e=>{
+  const t=e.target;
+  if(t.id==='renameInput'){
+    if(e.key==='Enter'){e.preventDefault(); saveRename(t.dataset.id,t.value);}
+    else if(e.key==='Escape'){ui.editing=null; render();}
+    return;
+  }
+  if((e.key==='Enter'||e.key===' ')&&t.getAttribute('role')==='button'&&t.tagName==='DIV'){
+    e.preventDefault(); act(t.dataset.act,t,e);
+  }
+});
+app.addEventListener('focusout',e=>{
+  const t=e.target;
+  if(t.id==='renameInput'&&ui.editing===t.dataset.id) saveRename(t.dataset.id,t.value);
+});
+app.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.id==='files'){const files=[...t.files]; t.value=''; addFiles(files); return;}
+  if(t.id==='interval'){
+    if(t.value==='custom') ui.customInterval=true;
+    else{ S.interval=+t.value; ui.customInterval=false; }
+    save(); render(); return;
+  }
+  if(t.id==='intervalCustom'){
+    const v=Math.max(1,Math.min(600,Math.round(+t.value)||30));
+    S.interval=v; if(PRESETS.includes(v)) ui.customInterval=false;
+    save(); render(); return;
+  }
+  if(t.id==='day'){ S.day=t.value||today(); save(); render(); }
+});
+
+/* Arrastrar y soltar (ratón) */
+app.addEventListener('dragstart',e=>{
+  const t=e.target.closest('[data-drag]'); if(!t||S.phase!=='prep') return;
+  e.dataTransfer.setData('text/plain',t.dataset.drag);
+  e.dataTransfer.effectAllowed='move';
+  t.classList.add('dragging');
+});
+app.addEventListener('dragend',()=>{
+  document.querySelectorAll('.dragging,.over').forEach(x=>x.classList.remove('dragging','over'));
+});
+app.addEventListener('dragover',e=>{
+  const z=e.target.closest('[data-slot],[data-pool]'); if(!z) return;
+  e.preventDefault(); e.dataTransfer.dropEffect='move'; z.classList.add('over');
+});
+app.addEventListener('dragleave',e=>{
+  const z=e.target.closest('[data-slot],[data-pool]');
+  if(z&&!z.contains(e.relatedTarget)) z.classList.remove('over');
+});
+app.addEventListener('drop',e=>{
+  const z=e.target.closest('[data-slot],[data-pool]'); if(!z) return;
+  e.preventDefault(); e.stopPropagation();
+  const files=e.dataTransfer.files;
+  if(files&&files.length){addFiles(files);return;}
+  const id=e.dataTransfer.getData('text/plain'); if(!id||!P(id)) return;
+  if(z.hasAttribute('data-slot')) place(id,+z.dataset.slot); else unplace(id);
+  ui.sel=null; save(); render();
+});
+/* Evita que soltar archivos fuera de la zona abra la foto en el navegador */
+window.addEventListener('dragover',e=>{ if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+window.addEventListener('drop',e=>{
+  if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){ e.preventDefault(); addFiles(e.dataTransfer.files); }
+});
+
+(async function boot(){
+  app.innerHTML='<p class="foot">Cargando fotos guardadas…</p>';
+  try{
+    await store.init();
+    let lib=[];
+    try{ lib=await store.all(); }catch(e){ lib=[]; }
+    const have=new Set(lib.map(p=>p.id));
+    let k=Math.max(0,...lib.map(p=>p.ord||0));
+    /* Fotos de la versión anterior, que estaban dentro del estado: se pasan a la biblioteca */
+    for(const p of S.photos){
+      if(p&&p.thumb&&!have.has(p.id)){ p.ord=++k; lib.push(p); try{ await store.put(p); }catch(e){} }
+    }
+    lib.sort((a,b)=>(a.ord||0)-(b.ord||0));
+    ordN=Math.max(0,...lib.map(p=>p.ord||0));
+    S.photos=lib;
+  }catch(e){ S.photos=S.photos.filter(p=>p&&p.thumb); }
+  save(); render();
+})();
+})();
+</script>
+
+</body>
+</html>
