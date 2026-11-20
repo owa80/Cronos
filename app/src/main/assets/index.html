@@ -215,6 +215,9 @@ table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;
 .countdown span{font-size:18px;font-weight:600;max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .countdown.go{background:rgba(27,122,73,.92)}
 .countdown.go b{font-size:min(26vw,110px)}
+.autosave{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 10px;border-radius:6px;background:var(--warn);color:var(--warn-ink);font-weight:600;font-size:15px}
+.autosave .grow{margin-right:auto}
+.autosave .btn.ghost{color:var(--warn-ink);border-color:rgba(0,0,0,.35);background-color:transparent}
 .tappable{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 /* Ventanas (nombre, elegir fotos, temporada) */
 .modal{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}
@@ -548,8 +551,10 @@ function runView(){
     '<div class="sub" id="nextinfo"></div></div>'+
     '<div class="top-right"><span class="pill">'+arrived+' / '+total+' en meta</span>'+
     (S.runInterval>0?'<button class="btn small ghost" data-act="sound" aria-pressed="'+soundOn+'">'+(soundOn?'🔊 Sonido':'🔇 Sin sonido')+'</button>':'')+
+    (!running&&needSave()?'<button class="btn blink" data-act="saveSheet"'+(ui.saving?' disabled':'')+'>Guardar</button>':'')+
     (running?'<button class="btn stop'+(total&&arrived>=total?' blink':'')+'" data-act="stop">'+(total&&arrived>=total?'Todos en meta · Terminar':'Terminar')+'</button>':'<button class="btn ghost" data-act="resume">Reanudar crono</button>')+
-    '</div></header>';
+    '</div>'+(ui.autoUntil?'<div class="autosave" role="status"><span class="grow">Autoguardado en <b id="autoNum">'+autoLeft()+'</b> s</span>'+
+      '<button class="btn small" data-act="saveSheet">Guardar ahora</button><button class="btn small ghost" data-act="autoCancel">Cancelar</button></div>':'')+'</header>';
 
   const tiles=S.order.map((id,i)=>{
     const p=P(id); if(!p) return '';
@@ -585,7 +590,7 @@ function runView(){
   const table='<section class="panel"><div class="panel-head"><h2>Resultados · '+S.distance+' m</h2></div>'+
     '<div class="tablewrap"><table class="res"><thead><tr><th>Pos</th><th>Palista</th><th>Día</th><th class="num">Tiempo</th><th class="num">Dif.</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div class="season">'+seasonLine()+'</div>'+
-    '<div class="row-actions"><button class="btn small" data-act="saveSheet"'+(sorted.length&&!ui.saving&&!S.savedIn?'':' disabled')+'>'+(S.savedIn?'Guardado ✓':'Guardar')+'</button>'+
+    '<div class="row-actions"><button class="btn small'+(needSave()?' blink':'')+'" data-act="saveSheet"'+(sorted.length&&!ui.saving&&!S.savedIn?'':' disabled')+'>'+(S.savedIn?'Guardado ✓':'Guardar')+'</button>'+
     '<button class="btn small ghost'+(ui.confirm==='reset'?' warn':'')+'" data-act="reset">'+(ui.confirm==='reset'?'¿Seguro? Se borran los tiempos':'Volver a preparar')+'</button></div>'+
     (ui.copyText?'<p class="hint">No se pudo copiar automáticamente. Selecciona este texto y cópialo:</p><textarea class="copybox" id="copyBox" readonly>'+esc(ui.copyText)+'</textarea>':'')+
     '</section>';
@@ -812,6 +817,23 @@ function summaryView(m){
     '<div class="row-actions"><button class="btn" data-act="viewLast">Ver último control</button><button class="btn ghost" data-act="closeModal">Cerrar</button></div>';
 }
 
+/* ---------- Autoguardado al terminar ---------- */
+const AUTO_SECS=15;
+let autoTimer=0;
+function needSave(){ return S.phase==='done'&&S.results.length>0&&!S.savedIn; }
+function autoLeft(){ return Math.max(0,Math.ceil((ui.autoUntil-Date.now())/1000)); }
+function autoStart(){
+  autoStop();
+  if(!needSave()) return;
+  ui.autoUntil=Date.now()+AUTO_SECS*1000;
+  autoTimer=setInterval(()=>{
+    if(!ui.autoUntil||!needSave()){ autoStop(); render(); return; }
+    const left=autoLeft(), el=$('#autoNum'); if(el) el.textContent=left;
+    if(left<=0){ autoStop(); render(); saveSheet(); }
+  },250);
+}
+function autoStop(){ clearInterval(autoTimer); autoTimer=0; ui.autoUntil=0; }
+
 /* ---------- Cuenta atrás y pitidos ---------- */
 const SOUND_KEY='crono-sonido';
 let soundOn=(()=>{ try{ return localStorage.getItem(SOUND_KEY)!=='0'; }catch(e){ return true; } })();
@@ -967,10 +989,11 @@ function act(name,el,e){
       const t=(down&&down.id===id&&Date.now()-down.t<2000)?down.t:Date.now();
       down=null; arrive(id,t); break;
     }
-    case 'stop': S.phase='done'; S.stoppedAt=Date.now(); save(); render(); break;
-    case 'resume': audioUnlock(); cdStartK=Math.floor((Date.now()-S.startAt)/((S.runInterval||1)*1000)); S.phase='running'; S.stoppedAt=null; save(); render(); break;
+    case 'stop': S.phase='done'; S.stoppedAt=Date.now(); save(); autoStart(); render(); break;
+    case 'autoCancel': autoStop(); render(); toast('Autoguardado cancelado: pulsa Guardar cuando quieras'); break;
+    case 'resume': autoStop(); audioUnlock(); cdStartK=Math.floor((Date.now()-S.startAt)/((S.runInterval||1)*1000)); S.phase='running'; S.stoppedAt=null; save(); render(); break;
     case 'del': S.results=S.results.filter(r=>r.id!==el.dataset.rid); S.savedIn=null; save(); render(); break;
-    case 'saveSheet': saveSheet(); break;
+    case 'saveSheet': autoStop(); saveSheet(); break;
     case 'sound': soundOn=!soundOn; try{ localStorage.setItem(SOUND_KEY,soundOn?'1':'0'); }catch(e){} audioUnlock(); if(soundOn) beep(880,0.12,0.3); render(); break;
     case 'newSeason': ui.modal={type:'season',then:'new',focus:true}; render(); break;
     case 'closeModal': ui.modal=null; render(); break;
@@ -993,6 +1016,7 @@ function act(name,el,e){
     case 'viewDist': ui.modal.dist=+el.dataset.v||0; render(); break;
     case 'reset':
       if(!askConfirm('reset')) break;
+      autoStop();
       S.phase='prep'; S.startAt=null; S.stoppedAt=null; S.order=[]; S.results=[]; S.day=today();
       ui.confirm=null; ui.copyText=null; save(); render(); window.scrollTo(0,0); break;
   }
