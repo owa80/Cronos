@@ -192,6 +192,9 @@ table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;
 .copybox{width:100%;min-height:120px;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
 .foot{font-size:12px;color:var(--muted)}
 
+.btn.blink{animation:blink 1s steps(2,start) infinite}
+@keyframes blink{0%{background:var(--stop);color:var(--stop-ink);box-shadow:0 0 0 4px var(--warn)}50%{background:var(--warn);color:var(--warn-ink);border-color:var(--warn);box-shadow:0 0 0 4px var(--stop)}}
+@media (prefers-reduced-motion:reduce){.btn.blink{animation-duration:2s}}
 .tappable{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 /* Ventanas (nombre, elegir fotos, temporada) */
 .modal{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}
@@ -199,6 +202,20 @@ table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;
 .backdrop{position:absolute;inset:0;background:rgba(5,15,22,.55)}
 .sheet{position:relative;background:var(--surface);color:var(--ink);border-radius:10px 10px 0 0;width:100%;max-width:560px;max-height:88vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
 @media (min-width:600px){.sheet{border-radius:10px}}
+.sheet.wide{max-width:980px}
+.sheet .tablewrap{max-height:none}
+.res .ctl{text-align:center;font-size:11px;line-height:1.2;white-space:nowrap}
+.res .ctl button{border:0;background:transparent;color:var(--accent);font:inherit;font-weight:700;padding:2px;text-decoration:underline}
+.res td.cell{text-align:center;line-height:1.15}
+.res td.cell b{display:block;font-family:var(--font-display);font-size:18px}
+.res td.cell small{color:var(--muted);font-size:11px}
+.res td.cell.p1 b{color:var(--go)}
+.res td.none{text-align:center;color:var(--muted)}
+.res .sticky{position:sticky;left:0;background:var(--surface);z-index:1}
+.res th.sticky{background:var(--surface2)}
+.res tr.win td.sticky{background:var(--win)}
+.res .sticky:first-child{width:34px;min-width:34px;max-width:34px;box-sizing:border-box}
+.ctl-list{display:flex;flex-wrap:wrap;gap:6px}
 .sheet h3{margin:0;font-size:18px}
 .txt{font:inherit;font-size:17px;color:var(--ink);background:var(--surface);border:1px solid var(--accent);border-radius:6px;min-height:46px;padding:6px 10px;width:100%;box-sizing:border-box}
 .pickgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
@@ -509,7 +526,7 @@ function runView(){
     '<div class="sub">'+S.distance+' m · '+fmtDayLong(S.day)+' · '+modeText+(running?'':' · crono detenido')+'</div>'+
     '<div class="sub" id="nextinfo"></div></div>'+
     '<div class="top-right"><span class="pill">'+arrived+' / '+total+' en meta</span>'+
-    (running?'<button class="btn stop" data-act="stop">Terminar</button>':'<button class="btn ghost" data-act="resume">Reanudar crono</button>')+
+    (running?'<button class="btn stop'+(total&&arrived>=total?' blink':'')+'" data-act="stop">'+(total&&arrived>=total?'Todos en meta · Terminar':'Terminar')+'</button>':'<button class="btn ghost" data-act="resume">Reanudar crono</button>')+
     '</div></header>';
 
   const tiles=S.order.map((id,i)=>{
@@ -585,7 +602,10 @@ function modalView(){
       '<input class="txt" id="modalInput" maxlength="12" autocomplete="off" inputmode="text" value="'+esc(suggestSeason())+'" aria-label="Temporada">'+
       '<div class="row-actions"><button class="btn" data-act="seasonOk">'+(m.then==='save'?'Crear y guardar':'Empezar temporada')+'</button><button class="btn ghost" data-act="closeModal">Cancelar</button></div>';
   }
-  return '<div class="modal" role="dialog" aria-modal="true"><div class="backdrop" data-act="closeModal"></div><div class="sheet">'+body+'</div></div>';
+  else if(m.type==='control') body=controlView(m);
+  else if(m.type==='summary') body=summaryView(m);
+  const wide=m.type==='control'||m.type==='summary';
+  return '<div class="modal" role="dialog" aria-modal="true"><div class="backdrop" data-act="closeModal"></div><div class="sheet'+(wide?' wide':'')+'">'+body+'</div></div>';
 }
 function placeChosen(i,ids){
   ids=ids.filter(id=>P(id)); if(!ids.length) return;
@@ -613,7 +633,9 @@ function filesLocation(){ try{ return bridge()?bridge().location():'Descargas'; 
 function seasonLine(){
   const cur=getSeason();
   return '<span>'+(cur?'Archivo actual: <b>temporada'+esc(cur)+'.xlsx</b>':'Aún no hay temporada: se pedirá al guardar')+'</span>'+
-    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button>';
+    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button>'+
+    '<button class="btn small ghost" data-act="viewLast"'+(cur?'':' disabled')+'>Ver último control</button>'+
+    '<button class="btn small ghost" data-act="viewSummary"'+(cur?'':' disabled')+'>Ver resumen</button>';
 }
 function seasonOk(){
   const v=cleanSeason(($('#modalInput')||{}).value);
@@ -683,6 +705,91 @@ async function saveSheet(){
   ui.saving=false; render();
 }
 
+/* ---------- Ver resultados guardados ---------- */
+/* Lee todos los controles del archivo de la temporada actual. Cada control es un
+   bloque: «500 m · dd/mm/aaaa · …», la fila de títulos y una fila por palista. */
+function loadControls(){
+  const season=getSeason(); if(!season) return null;
+  const wb=readBook('temporada'+season+'.xlsx'); if(!wb) return [];
+  const list=[]; let seq=0;
+  wb.SheetNames.forEach(sn=>{
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
+    for(let i=0;i<rows.length;i++){
+      const h=String(rows[i][0]||'').match(/^(\d+)\s*m\s*·\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*·?\s*(.*)$/);
+      if(!h||String((rows[i+1]||[])[0]).trim()!=='Pos') continue;
+      const c={distance:+h[1],day:h[4]+'-'+pad(+h[3])+'-'+pad(+h[2]),mode:h[5]||'',sheet:sn,seq:seq++,results:[]};
+      for(let j=i+2;j<rows.length;j++){
+        const r=rows[j], pos=+r[0];
+        if(!r[0]||!isFinite(pos)||!String(r[1]).trim()) break;
+        const sec=typeof r[5]==='number'?r[5]:null;
+        c.results.push({pos,name:String(r[1]).trim(),time:String(r[2]||''),diff:String(r[3]||''),start:String(r[4]||''),sec});
+        i=j;
+      }
+      if(c.results.length) list.push(c);
+    }
+  });
+  /* Del último al primer control */
+  list.sort((a,b)=>a.day<b.day?1:a.day>b.day?-1:b.seq-a.seq);
+  return list;
+}
+function openResults(type,idx){
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar el lector de hojas de cálculo'); return; }
+  const ctls=loadControls();
+  if(ctls===null){ toast('Aún no hay temporada'); return; }
+  if(!ctls.length){ toast('Todavía no hay controles guardados en temporada'+getSeason()+'.xlsx'); return; }
+  ui.modal={type,idx:idx||0,ctls,dist:0}; render();
+}
+const keyName=n=>String(n).trim().toLowerCase().replace(/\s+/g,' ');
+function ctlLabel(c){ return fmtDay(c.day)+' · '+c.distance+' m'; }
+function ctlButtons(m){
+  return '<div class="ctl-list">'+m.ctls.map((c,i)=>'<button class="chip" aria-pressed="'+(m.type==='control'&&m.idx===i)+'" data-act="viewCtl" data-i="'+i+'">'+esc(ctlLabel(c))+'</button>').join('')+'</div>';
+}
+function controlView(m){
+  const c=m.ctls[m.idx]; if(!c) return '';
+  const rows=c.results.map((r,i)=>'<tr class="'+(i===0?'win':'')+'"><td><span class="pos">'+r.pos+'</span></td><td>'+esc(r.name)+'</td><td class="num time">'+esc(r.time)+'</td><td class="num diff">'+esc(r.diff||'—')+'</td><td class="num">'+esc(r.start)+'</td></tr>').join('');
+  return '<h3>'+(m.idx===0?'Último control':'Control')+' · '+esc(fmtDayLong(c.day))+' · '+c.distance+' m</h3>'+
+    '<p class="hint">'+esc(c.mode)+(c.mode?' · ':'')+c.results.length+' palistas · temporada'+esc(getSeason())+'.xlsx, hoja '+esc(c.sheet)+'</p>'+
+    '<div class="tablewrap"><table class="res"><thead><tr><th>Pos</th><th>Palista</th><th class="num">Tiempo</th><th class="num">Dif.</th><th class="num">Salió</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<span class="lbl">Otros controles (del último al primero)</span>'+ctlButtons(m)+
+    '<div class="row-actions"><button class="btn" data-act="viewSummary">Ver resumen</button><button class="btn ghost" data-act="closeModal">Cerrar</button></div>';
+}
+/* Resumen: una columna por control (del último al primero) y una fila por palista,
+   de mejor a peor según la media de sus puestos. Quien falta a un control cuenta
+   como último + 1 en ese control, para no premiar ir a menos controles. */
+function summaryRows(ctls){
+  const people={};
+  ctls.forEach((c,ci)=>c.results.forEach(r=>{
+    const k=keyName(r.name);
+    const p=people[k]||(people[k]={name:r.name,cells:{},sum:0,n:0,wins:0});
+    p.cells[ci]=r; p.n++; if(r.pos===1) p.wins++;
+  }));
+  const list=Object.values(people);
+  list.forEach(p=>{
+    p.sum=0;
+    ctls.forEach((c,ci)=>{ p.sum+=p.cells[ci]?p.cells[ci].pos:c.results.length+1; });
+    p.avg=ctls.length?p.sum/ctls.length:0;
+  });
+  list.sort((a,b)=>a.sum-b.sum||b.n-a.n||b.wins-a.wins||a.name.localeCompare(b.name));
+  return list;
+}
+function summaryView(m){
+  const dists=[...new Set(m.ctls.map(c=>c.distance))].sort((a,b)=>a-b);
+  const ctls=m.ctls.map((c,i)=>Object.assign({i},c)).filter(c=>!m.dist||c.distance===m.dist);
+  const people=summaryRows(ctls);
+  const chips='<div class="chips"><button class="chip" aria-pressed="'+(!m.dist)+'" data-act="viewDist" data-v="0">Todas</button>'+
+    dists.map(d=>'<button class="chip" aria-pressed="'+(m.dist===d)+'" data-act="viewDist" data-v="'+d+'">'+d+' m</button>').join('')+'</div>';
+  const head='<tr><th class="sticky">#</th><th class="sticky" style="left:34px">Palista</th><th class="num">Media</th>'+
+    ctls.map(c=>'<th class="ctl"><button data-act="viewCtl" data-i="'+c.i+'">'+esc(fmtDay(c.day))+'<br>'+c.distance+' m</button></th>').join('')+'</tr>';
+  const body=people.map((p,k)=>'<tr class="'+(k===0?'win':'')+'"><td class="sticky"><span class="pos">'+(k+1)+'</span></td><td class="sticky" style="left:34px"><b>'+esc(p.name)+'</b><br><small class="diff">'+p.n+' de '+ctls.length+' controles</small></td>'+
+    '<td class="num">'+p.avg.toFixed(1).replace('.',',')+'</td>'+
+    ctls.map((c,ci)=>{ const r=p.cells[ci]; return r?'<td class="cell'+(r.pos===1?' p1':'')+'"><b>'+r.pos+'º</b><small>'+esc(r.time)+'</small></td>':'<td class="none">—</td>'; }).join('')+'</tr>').join('');
+  return '<h3>Resumen · temporada'+esc(getSeason())+'</h3>'+
+    '<p class="hint">Palistas de mejor a peor según la media de sus puestos. Si alguien no estuvo en un control, cuenta como último + 1 en ese control. Los controles van del último al primero; toca uno para ver su tabla.</p>'+
+    (dists.length>1?chips:'')+
+    '<div class="tablewrap"><table class="res"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>'+
+    '<div class="row-actions"><button class="btn" data-act="viewLast">Ver último control</button><button class="btn ghost" data-act="closeModal">Cerrar</button></div>';
+}
+
 /* ---------- Reloj ---------- */
 function tick(){
   const el=$('#clock');
@@ -717,6 +824,7 @@ function arrive(id,t){
   S.savedIn=null;
   ui.flash=id; save(); render();
   if(net<0) toast('Este palista aún no debería haber llegado: revisa la fila');
+  else if(S.results.length>=S.order.length){ toast('Han llegado todos: pulsa Terminar'); try{ navigator.vibrate&&navigator.vibrate([200,100,200]); }catch(e){} }
 }
 function resultsText(){
   const sorted=S.results.slice().sort((a,b)=>a.net-b.net);
@@ -807,6 +915,10 @@ function act(name,el,e){
     }
     case 'pickDone': placeChosen(ui.modal.slot,ui.modal.chosen); ui.modal=null; save(); render(); break;
     case 'seasonOk': seasonOk(); break;
+    case 'viewLast': openResults('control',0); break;
+    case 'viewSummary': openResults('summary'); break;
+    case 'viewCtl': ui.modal.type='control'; ui.modal.idx=+el.dataset.i; render(); break;
+    case 'viewDist': ui.modal.dist=+el.dataset.v||0; render(); break;
     case 'reset':
       if(!askConfirm('reset')) break;
       S.phase='prep'; S.startAt=null; S.stoppedAt=null; S.order=[]; S.results=[]; S.day=today();
