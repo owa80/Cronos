@@ -10,6 +10,8 @@ App Android para cronometrar controles de piragüismo (200, 500, 1000, 1500 y 30
 - Al pulsar Iniciar sale el primero (amarillo, en ruta) y el siguiente se marca en verde. Con cada intervalo sale el verde y se marca el siguiente. Al llegar, se marca en rojo.
 - Cada llegada se registra tocando la foto. El tiempo descuenta la salida escalonada, y la tabla se ordena de menor a mayor tiempo con el día y la diferencia con el ganador.
 - Guardar resultados: crea la hoja de cálculo `temporadaXX.xlsx` en Descargas/Cronos (XX lo elige el usuario) con una hoja por día (día-mes-año). Si el archivo ya existe, añade la hoja; varios controles del mismo día van uno debajo de otro. «Nueva temporada» empieza un archivo nuevo.
+- Ver último control y Ver resumen: leen el archivo de la temporada actual. El resumen pone una columna por control (del último al primero) y ordena a los palistas por la media de sus puestos; quien falta a un control cuenta como último + 1. Se puede filtrar por distancia.
+- Cuando llega el último palista, el botón Terminar parpadea.
 - La pantalla no se apaga mientras la app está abierta.
 
 ## Obtener el .apk sin Android Studio
