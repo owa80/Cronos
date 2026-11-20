@@ -85,6 +85,21 @@ p{margin:0}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.warn{border-color:var(--stop);color:var(--stop);background:transparent}
 .top .btn.ghost{color:var(--bar-ink);border-color:rgba(255,255,255,.4)}
+/* Botones en 3D: brillo arriba, canto oscuro abajo y se hunden al pulsar */
+.btn,.chip{
+  position:relative;cursor:pointer;
+  background-image:linear-gradient(180deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,.06) 48%,rgba(0,0,0,.10) 100%);
+  box-shadow:0 4px 0 rgba(0,0,0,.32),0 6px 10px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.35);
+  transform:translateY(0);transition:transform .06s ease,box-shadow .06s ease;
+  margin-bottom:4px;-webkit-tap-highlight-color:transparent;
+}
+.btn.ghost,.btn.warn,.chip{background-color:var(--surface);box-shadow:0 4px 0 var(--line),0 6px 10px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.6)}
+.chip[aria-pressed="true"]{box-shadow:0 4px 0 rgba(0,0,0,.32),0 6px 10px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.35)}
+.top .btn.ghost{background-color:transparent;box-shadow:0 4px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.2)}
+.btn:active:not(:disabled),.chip:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.32),0 2px 3px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.2)}
+.btn.ghost:active:not(:disabled),.btn.warn:active,.chip:not([aria-pressed="true"]):active{box-shadow:0 1px 0 var(--line),0 2px 3px rgba(0,0,0,.12)}
+.btn:disabled{box-shadow:0 2px 0 rgba(0,0,0,.15)}
+@media (prefers-reduced-motion:reduce){.btn,.chip{transition:none}}
 
 /* Paneles */
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
@@ -466,7 +481,7 @@ function prepView(){
     '<div class="field"><span class="lbl">Tipo de salida</span><div class="chips">'+modes+'</div></div>'+
     ivField+
     '<div class="field"><label class="lbl" for="day">Día</label><input type="date" id="day" value="'+esc(S.day)+'"></div>'+
-    '<div class="field"><span class="lbl">Temporada</span>'+seasonLine()+'</div>'+
+    '<div class="field"><span class="lbl">Temporada</span><div class="season">'+seasonLine()+'</div></div>'+
     '</div></section>';
 
   const poolTiles=pool.map(p=>
