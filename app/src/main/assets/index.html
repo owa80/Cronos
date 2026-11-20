@@ -210,6 +210,11 @@ table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;
 .btn.blink{animation:blink 1s steps(2,start) infinite}
 @keyframes blink{0%{background:var(--stop);color:var(--stop-ink);box-shadow:0 0 0 4px var(--warn)}50%{background:var(--warn);color:var(--warn-ink);border-color:var(--warn);box-shadow:0 0 0 4px var(--stop)}}
 @media (prefers-reduced-motion:reduce){.btn.blink{animation-duration:2s}}
+.countdown{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:35;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:18px 34px;border-radius:16px;background:rgba(15,37,51,.82);color:#fff;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.countdown b{font-family:var(--font-display);font-size:min(46vw,190px);line-height:.9;font-weight:700;font-variant-numeric:tabular-nums}
+.countdown span{font-size:18px;font-weight:600;max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.countdown.go{background:rgba(27,122,73,.92)}
+.countdown.go b{font-size:min(26vw,110px)}
 .tappable{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 /* Ventanas (nombre, elegir fotos, temporada) */
 .modal{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}
@@ -246,6 +251,7 @@ table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;
 
 <div class="wrap" id="app"></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="countdown" id="countdown" aria-live="assertive" hidden><b id="cdNum"></b><span id="cdName"></span></div>
 
 <script src="xlsx.mini.min.js"></script>
 <script>
@@ -541,6 +547,7 @@ function runView(){
     '<div class="sub">'+S.distance+' m · '+fmtDayLong(S.day)+' · '+modeText+(running?'':' · crono detenido')+'</div>'+
     '<div class="sub" id="nextinfo"></div></div>'+
     '<div class="top-right"><span class="pill">'+arrived+' / '+total+' en meta</span>'+
+    (S.runInterval>0?'<button class="btn small ghost" data-act="sound" aria-pressed="'+soundOn+'">'+(soundOn?'🔊 Sonido':'🔇 Sin sonido')+'</button>':'')+
     (running?'<button class="btn stop'+(total&&arrived>=total?' blink':'')+'" data-act="stop">'+(total&&arrived>=total?'Todos en meta · Terminar':'Terminar')+'</button>':'<button class="btn ghost" data-act="resume">Reanudar crono</button>')+
     '</div></header>';
 
@@ -805,6 +812,53 @@ function summaryView(m){
     '<div class="row-actions"><button class="btn" data-act="viewLast">Ver último control</button><button class="btn ghost" data-act="closeModal">Cerrar</button></div>';
 }
 
+/* ---------- Cuenta atrás y pitidos ---------- */
+const SOUND_KEY='crono-sonido';
+let soundOn=(()=>{ try{ return localStorage.getItem(SOUND_KEY)!=='0'; }catch(e){ return true; } })();
+let actx=null, cdKey='', cdStartK=-1, cdGoUntil=0;
+function audioUnlock(){
+  try{
+    if(!actx){ const C=window.AudioContext||window.webkitAudioContext; if(C) actx=new C(); }
+    if(actx&&actx.state==='suspended') actx.resume();
+  }catch(e){}
+}
+function beep(freq,dur,vol){
+  if(!soundOn||!actx) return;
+  try{
+    const t0=actx.currentTime, o=actx.createOscillator(), g=actx.createGain();
+    o.type='square'; o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(vol,t0+0.01);
+    g.gain.setValueAtTime(vol,t0+dur-0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0+dur+0.02);
+  }catch(e){}
+}
+/* Los 5 últimos segundos antes de cada salida, desde el 2º palista: número grande y
+   pitido corto cada segundo; al salir, pitido más agudo y algo más largo. */
+function countdown(t){
+  const box=$('#countdown'); if(!box) return;
+  const iv=S.runInterval*1000, n=S.order.length;
+  if(S.phase!=='running'||!iv){ box.hidden=true; return; }
+  const g=Math.floor(t/iv), k=g+1;
+  if(cdStartK<0) cdStartK=g; /* tras recargar la página no se repiten pitidos pasados */
+  if(g>=1&&g<n&&g>cdStartK){
+    cdStartK=g;
+    if(t-g*iv<1000){ beep(1320,0.45,0.35); cdGoUntil=Date.now()+900; const p=P(S.order[g]); $('#cdNum').textContent='¡Sale!'; $('#cdName').textContent=p?p.name:''; box.classList.add('go'); box.hidden=false; }
+  }
+  if(Date.now()<cdGoUntil) return;
+  const rem=k*iv-t;
+  if(k<n&&rem<=5000&&rem>0){
+    const sec=Math.ceil(rem/1000), key=k+':'+sec;
+    if(key!==cdKey){
+      cdKey=key; beep(880,0.12,0.3);
+      const p=P(S.order[k]);
+      $('#cdNum').textContent=sec; $('#cdName').textContent=p?p.name:'';
+      box.classList.remove('go'); box.hidden=false;
+    }
+  }else box.hidden=true;
+}
+
 /* ---------- Reloj ---------- */
 function tick(){
   const el=$('#clock');
@@ -812,6 +866,7 @@ function tick(){
   if(el) el.textContent=fmt(t);
   if(S.phase!=='prep'){
     applyStates(t);
+    countdown(t);
     const ni=$('#nextinfo');
     if(ni){ const s=S.phase==='running'?nextInfo(t):''; if(ni.textContent!==s) ni.textContent=s; }
   }
@@ -904,6 +959,7 @@ function act(name,el,e){
       if(!order.length) break;
       S.order=order; S.runInterval=effInterval(); S.results=[]; S.savedIn=null; S.block=null;
       S.phase='running'; S.startAt=Date.now(); S.stoppedAt=null;
+      audioUnlock(); cdKey=''; cdStartK=0; cdGoUntil=0;
       ui.sel=null; ui.editing=null; ui.copyText=null; ui.confirm=null;
       save(); render(); window.scrollTo(0,0); break;
     }
@@ -912,9 +968,10 @@ function act(name,el,e){
       down=null; arrive(id,t); break;
     }
     case 'stop': S.phase='done'; S.stoppedAt=Date.now(); save(); render(); break;
-    case 'resume': S.phase='running'; S.stoppedAt=null; save(); render(); break;
+    case 'resume': audioUnlock(); cdStartK=Math.floor((Date.now()-S.startAt)/((S.runInterval||1)*1000)); S.phase='running'; S.stoppedAt=null; save(); render(); break;
     case 'del': S.results=S.results.filter(r=>r.id!==el.dataset.rid); S.savedIn=null; save(); render(); break;
     case 'saveSheet': saveSheet(); break;
+    case 'sound': soundOn=!soundOn; try{ localStorage.setItem(SOUND_KEY,soundOn?'1':'0'); }catch(e){} audioUnlock(); if(soundOn) beep(880,0.12,0.3); render(); break;
     case 'newSeason': ui.modal={type:'season',then:'new',focus:true}; render(); break;
     case 'closeModal': ui.modal=null; render(); break;
     case 'saveName': saveRename(ui.modal&&ui.modal.id,($('#modalInput')||{}).value); break;
@@ -943,6 +1000,7 @@ function act(name,el,e){
 
 /* ---------- Eventos ---------- */
 app.addEventListener('pointerdown',e=>{
+  if(S.phase==='running') audioUnlock();
   const el=e.target.closest('[data-act="arrive"]');
   if(el) down={id:el.dataset.id,t:Date.now()};
 });
