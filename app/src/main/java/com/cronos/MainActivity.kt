@@ -54,6 +54,8 @@ class MainActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            // Pitidos de la cuenta atrás sin tener que tocar la pantalla antes de cada salida.
+            mediaPlaybackRequiresUserGesture = false
             allowFileAccess = false
             allowContentAccess = true
             cacheMode = WebSettings.LOAD_DEFAULT
