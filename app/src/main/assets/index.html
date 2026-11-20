@@ -768,8 +768,9 @@ function openResults(type,idx){
 }
 const keyName=n=>String(n).trim().toLowerCase().replace(/\s+/g,' ');
 function ctlLabel(c){ return fmtDay(c.day)+' · '+c.distance+' m'; }
+/* Desplegable con todos los controles (del último al primero), para que no ocupen pantalla */
 function ctlButtons(m){
-  return '<div class="ctl-list">'+m.ctls.map((c,i)=>'<button class="chip" aria-pressed="'+(m.type==='control'&&m.idx===i)+'" data-act="viewCtl" data-i="'+i+'">'+esc(ctlLabel(c))+'</button>').join('')+'</div>';
+  return '<select id="ctlSelect" aria-label="Elegir control" style="width:100%">'+m.ctls.map((c,i)=>'<option value="'+i+'"'+(m.idx===i?' selected':'')+'>'+(i===0?'Último · ':'')+esc(ctlLabel(c))+' · '+c.results.length+' palistas</option>').join('')+'</select>';
 }
 function controlView(m){
   const c=m.ctls[m.idx]; if(!c) return '';
@@ -777,7 +778,7 @@ function controlView(m){
   return '<h3>'+(m.idx===0?'Último control':'Control')+' · '+esc(fmtDayLong(c.day))+' · '+c.distance+' m</h3>'+
     '<p class="hint">'+esc(c.mode)+(c.mode?' · ':'')+c.results.length+' palistas · temporada'+esc(getSeason())+'.xlsx, hoja '+esc(c.sheet)+'</p>'+
     '<div class="tablewrap"><table class="res"><thead><tr><th>Pos</th><th>Palista</th><th class="num">Tiempo</th><th class="num">Dif.</th><th class="num">Salió</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-    '<span class="lbl">Otros controles (del último al primero)</span>'+ctlButtons(m)+
+    '<label class="lbl" for="ctlSelect">Ver otro control</label>'+ctlButtons(m)+
     '<div class="row-actions"><button class="btn" data-act="viewSummary">Ver resumen</button><button class="btn ghost" data-act="closeModal">Cerrar</button></div>';
 }
 /* Resumen: una columna por control (del último al primero) y una fila por palista,
@@ -1055,6 +1056,7 @@ app.addEventListener('focusout',e=>{
 });
 app.addEventListener('change',e=>{
   const t=e.target;
+  if(t.id==='ctlSelect'&&ui.modal){ ui.modal.type='control'; ui.modal.idx=+t.value; render(); return; }
   if(t.id==='files'){const files=[...t.files]; t.value=''; addFiles(files); return;}
   if(t.id==='interval'){
     if(t.value==='custom') ui.customInterval=true;
