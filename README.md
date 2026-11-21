@@ -25,13 +25,29 @@ App Android para cronometrar controles de piragüismo (200, 500, 1000, 1500, 200
 
 El .apk se firma con una clave de depuración fija incluida en el repositorio, así que cada versión nueva se instala encima de la anterior y conserva las fotos y los datos.
 
+## iPhone (y cualquier móvil con navegador)
+
+La misma app se publica como web en **https://owa80.github.io/Cronos/** cada vez que cambia en `main`.
+
+1. Abre esa dirección en **Safari** en el iPhone.
+2. Pulsa **Compartir → Añadir a pantalla de inicio**. Aparece el icono de Cronos y se abre a pantalla completa, como una app.
+3. Tras la primera vez funciona sin conexión.
+
+Diferencias con Android:
+- El archivo `temporadaXX.xlsx` se guarda dentro de la app (así el autoguardado funciona solo). Para sacarlo, pulsa **Exportar** y elige «Guardar en Archivos», WhatsApp, correo, etc.
+- El iPhone no vibra desde una web; el resto de avisos (parpadeo, pitidos) funciona.
+- Los pitidos suenan con el modo silencio en iOS 17 o posterior; en versiones anteriores, quita el modo silencio.
+- Los datos viven en Safari: si se borran los datos de sitios web, se pierden fotos y archivos (exporta la temporada de vez en cuando).
+
 ## Estructura
 
 - `app/src/main/assets/index.html`: la app completa (HTML, CSS y JavaScript en un solo archivo).
 - `app/src/main/assets/xlsx.mini.min.js`: SheetJS 0.18.5 (Apache 2.0), para leer y escribir las hojas de cálculo sin internet.
 - `app/src/main/java/com/cronos/SeasonFiles.kt`: guarda y lee los archivos de temporada en Descargas/Cronos.
 - `app/src/main/java/com/cronos/MainActivity.kt`: muestra la página en un WebView, abre el selector de fotos y bloquea cualquier acceso a internet.
-- `.github/workflows/build-apk.yml`: compilación automática.
+- `.github/workflows/build-apk.yml`: compilación automática del APK.
+- `.github/workflows/pages.yml`: publicación de la versión web (iPhone) en GitHub Pages.
+- `app/src/main/assets/manifest.webmanifest`, `sw.js` e iconos: lo que necesita la versión web para instalarse y funcionar sin conexión.
 
 ## Datos
 

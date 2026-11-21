@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>Crono Piragüismo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#0F2533">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cronos">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 :root{
   /* Layout: barra de tiempo fija arriba. Preparación = ajustes, luego bandeja de fotos junto a la parrilla de 4 columnas.
@@ -476,7 +483,8 @@ function prepView(){
   const bar='<header class="top"><div class="brand"><span class="brand-name">Crono Piragüismo</span>'+
     '<span class="sub">Preparación · '+n+(n===1?' participa':' participan')+'</span>'+
     '<div class="topseason"><span>'+(getSeason()?'Temporada: <b>temporada'+esc(getSeason())+'.xlsx</b>':'Sin temporada: se pedirá al guardar')+'</span>'+
-    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button></div></div>'+
+    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button>'+
+    (!bridge()&&getSeason()?'<button class="btn small ghost" data-act="exportSeason">Exportar</button>':'')+'</div></div>'+
     '<div class="top-right"><button class="btn go" data-act="start"'+(n?'':' disabled')+'>Iniciar salida</button></div></header>';
 
   const dist='<select id="distance" aria-label="Distancia">'+DISTANCES.map(d=>'<option value="'+d+'"'+(S.distance===d?' selected':'')+'>'+d+' m</option>').join('')+'</select>';
@@ -629,7 +637,7 @@ function modalView(){
   }else if(m.type==='season'){
     const cur=getSeason();
     body='<h3>'+(m.then==='new'?'Nueva temporada':'Elegir temporada')+'</h3>'+
-      '<p class="hint">Los resultados se guardan en el archivo <b>temporadaXX.xlsx</b> de la carpeta '+esc(filesLocation())+'. Cada día de control es una hoja nueva con el nombre día-mes-año. Escribe lo que va en lugar de XX (por ejemplo 26 o 2026-27).</p>'+
+      '<p class="hint">Los resultados se guardan en el archivo <b>temporadaXX.xlsx</b> '+(bridge()?'de la carpeta '+esc(filesLocation()):'dentro de la app (sácalo con «Exportar»)')+'. Cada día de control es una hoja nueva con el nombre día-mes-año. Escribe lo que va en lugar de XX (por ejemplo 26 o 2026-27).</p>'+
       (m.then==='new'&&cur?'<p class="hint">La temporada actual es <b>temporada'+esc(cur)+'</b>. Ese archivo se queda como está y los próximos resultados irán al nuevo.</p>':'')+
       '<input class="txt" id="modalInput" maxlength="12" autocomplete="off" inputmode="text" value="'+esc(suggestSeason())+'" aria-label="Temporada">'+
       '<div class="row-actions"><button class="btn" data-act="seasonOk">'+(m.then==='save'?'Crear y guardar':'Empezar temporada')+'</button><button class="btn ghost" data-act="closeModal">Cancelar</button></div>';
@@ -661,11 +669,12 @@ function suggestSeason(){
   return /^\d+$/.test(cur)?String(+cur+1).padStart(cur.length,'0'):cur;
 }
 const bridge=()=>window.CronosFiles||null;
-function filesLocation(){ try{ return bridge()?bridge().location():'Descargas'; }catch(e){ return 'Descargas'; } }
+function filesLocation(){ try{ return bridge()?bridge().location():'la app'; }catch(e){ return 'la app'; } }
 function seasonLine(){
   const cur=getSeason();
   return '<span>'+(cur?'Archivo actual: <b>temporada'+esc(cur)+'.xlsx</b>':'Aún no hay temporada: se pedirá al guardar')+'</span>'+
-    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button>'+viewButtons();
+    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button>'+
+    (!bridge()&&cur?'<button class="btn small ghost" data-act="exportSeason">Exportar</button>':'')+viewButtons();
 }
 function viewButtons(){
   const cur=getSeason();
@@ -691,12 +700,25 @@ function readBook(name){
 function writeBook(name,wb){
   const b=XLSX.write(wb,{type:'base64',bookType:'xlsx'});
   if(bridge()) return bridge().write(name,b);
-  /* Sin la app (navegador): se guarda una copia aquí y se descarga el archivo */
-  try{ localStorage.setItem('crono-xlsx-'+name,b); }catch(e){}
-  const url=URL.createObjectURL(new Blob([b64ToBytes(b)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  /* iPhone / navegador: el archivo se guarda dentro de la app (así el autoguardado
+     funciona sin tocar nada) y se saca con «Exportar» cuando se quiera. */
+  try{ localStorage.setItem('crono-xlsx-'+name,b); }catch(e){ return 'error:no queda espacio en el navegador'; }
+  return 'ok';
+}
+const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+async function exportSeason(){
+  const season=getSeason(); if(!season){ toast('Aún no hay temporada'); return; }
+  const name='temporada'+season+'.xlsx';
+  let b=''; try{ b=localStorage.getItem('crono-xlsx-'+name)||''; }catch(e){}
+  if(!b){ toast('Todavía no hay resultados guardados en '+name); return; }
+  const blob=new Blob([b64ToBytes(b)],{type:XLSX_MIME});
+  try{
+    const file=new File([blob],name,{type:XLSX_MIME});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:name}); return; }
+  }catch(e){ if(e&&e.name==='AbortError') return; }
+  const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),4000);
-  return 'ok';
 }
 function resultRows(){
   const sorted=S.results.slice().sort((a,b)=>a.net-b.net);
@@ -733,7 +755,7 @@ async function saveSheet(){
       XLSX.utils.book_append_sheet(wb,ws,sheet);
     }
     const res=writeBook(name,wb);
-    if(res==='ok'){ S.savedIn=name; S.block={file:name,sheet,row,len:Math.max(rows.length,blk?blk.len:0)}; save(); toast('Guardado en '+filesLocation()+'/'+name+' · hoja '+sheet); }
+    if(res==='ok'){ S.savedIn=name; S.block={file:name,sheet,row,len:Math.max(rows.length,blk?blk.len:0)}; save(); toast(bridge()?'Guardado en '+filesLocation()+'/'+name+' · hoja '+sheet:'Guardado en '+name+' · hoja '+sheet+'. Usa «Exportar» para sacar el archivo'); }
     else if(res==='perm') toast('Permite el acceso al almacenamiento y vuelve a pulsar Guardar');
     else toast('No se pudo guardar: '+String(res).replace(/^error:/,''));
   }catch(e){ toast('No se pudo guardar la hoja de cálculo'); }
@@ -843,11 +865,24 @@ function autoStart(){
 }
 function autoStop(){ clearInterval(autoTimer); autoTimer=0; ui.autoUntil=0; }
 
+/* ---------- Pantalla encendida (iPhone / navegador; en Android lo hace la app) ---------- */
+let wakeLock=null;
+async function keepAwake(on){
+  if(bridge()||!('wakeLock' in navigator)) return;
+  try{
+    if(on&&!wakeLock){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{wakeLock=null;}); }
+    else if(!on&&wakeLock){ await wakeLock.release(); wakeLock=null; }
+  }catch(e){ wakeLock=null; }
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&S.phase==='running') keepAwake(true); });
+
 /* ---------- Cuenta atrás y pitidos ---------- */
 const SOUND_KEY='crono-sonido';
 let soundOn=(()=>{ try{ return localStorage.getItem(SOUND_KEY)!=='0'; }catch(e){ return true; } })();
 let actx=null, cdKey='', cdStartK=-1, cdGoUntil=0;
 function audioUnlock(){
+  /* iPhone: que los pitidos suenen aunque esté en modo silencio (Safari 16.4+) */
+  try{ if(navigator.audioSession) navigator.audioSession.type='playback'; }catch(e){}
   try{
     if(!actx){ const C=window.AudioContext||window.webkitAudioContext; if(C) actx=new C(); }
     if(actx&&actx.state==='suspended') actx.resume();
@@ -990,7 +1025,7 @@ function act(name,el,e){
       if(!order.length) break;
       S.order=order; S.runInterval=effInterval(); S.results=[]; S.savedIn=null; S.block=null;
       S.phase='running'; S.startAt=Date.now(); S.stoppedAt=null;
-      audioUnlock(); cdKey=''; cdStartK=0; cdGoUntil=0;
+      audioUnlock(); keepAwake(true); cdKey=''; cdStartK=0; cdGoUntil=0;
       ui.sel=null; ui.editing=null; ui.copyText=null; ui.confirm=null;
       save(); render(); window.scrollTo(0,0); break;
     }
@@ -998,11 +1033,12 @@ function act(name,el,e){
       const t=(down&&down.id===id&&Date.now()-down.t<2000)?down.t:Date.now();
       down=null; arrive(id,t); break;
     }
-    case 'stop': S.phase='done'; S.stoppedAt=Date.now(); save(); autoStart(); render(); break;
+    case 'stop': keepAwake(false); S.phase='done'; S.stoppedAt=Date.now(); save(); autoStart(); render(); break;
     case 'autoCancel': autoStop(); render(); toast('Autoguardado cancelado: pulsa Guardar cuando quieras'); break;
-    case 'resume': autoStop(); audioUnlock(); cdStartK=Math.floor((Date.now()-S.startAt)/((S.runInterval||1)*1000)); S.phase='running'; S.stoppedAt=null; save(); render(); break;
+    case 'resume': autoStop(); audioUnlock(); keepAwake(true); cdStartK=Math.floor((Date.now()-S.startAt)/((S.runInterval||1)*1000)); S.phase='running'; S.stoppedAt=null; save(); render(); break;
     case 'del': S.results=S.results.filter(r=>r.id!==el.dataset.rid); S.savedIn=null; save(); render(); break;
     case 'saveSheet': autoStop(); saveSheet(); break;
+    case 'exportSeason': exportSeason(); break;
     case 'sound': soundOn=!soundOn; try{ localStorage.setItem(SOUND_KEY,soundOn?'1':'0'); }catch(e){} audioUnlock(); if(soundOn) beep(880,0.12,0.3); render(); break;
     case 'newSeason': ui.modal={type:'season',then:'new',focus:true}; render(); break;
     case 'closeModal': ui.modal=null; render(); break;
@@ -1112,6 +1148,10 @@ window.addEventListener('dragover',e=>{ if(e.dataTransfer&&[...e.dataTransfer.ty
 window.addEventListener('drop',e=>{
   if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){ e.preventDefault(); addFiles(e.dataTransfer.files); }
 });
+
+if('serviceWorker' in navigator&&window.isSecureContext&&location.hostname!=='appassets.androidplatform.net'){
+  window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
 
 (async function boot(){
   app.innerHTML='<p class="foot">Cargando fotos guardadas…</p>';
