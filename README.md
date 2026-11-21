@@ -1,6 +1,6 @@
 # Cronos
 
-App Android para cronometrar controles de piragüismo (200, 500, 1000, 1500 y 3000 m) a partir de las fotos de los palistas. Funciona sin conexión a internet.
+App Android para cronometrar controles de piragüismo (200, 500, 1000, 1500, 2000, 3000 y 5000 m) a partir de las fotos de los palistas. Funciona sin conexión a internet.
 
 ## Funciones
 
@@ -12,7 +12,7 @@ App Android para cronometrar controles de piragüismo (200, 500, 1000, 1500 y 30
 - Guardar resultados: crea la hoja de cálculo `temporadaXX.xlsx` en Descargas/Cronos (XX lo elige el usuario) con una hoja por día (día-mes-año). Si el archivo ya existe, añade la hoja; varios controles del mismo día van uno debajo de otro. «Nueva temporada» empieza un archivo nuevo.
 - Ver último control y Ver resumen: leen el archivo de la temporada actual. El resumen pone una columna por control (del último al primero) y ordena a los palistas por la media de sus puestos; quien falta a un control cuenta como último + 1. Se puede filtrar por distancia.
 - Cuenta atrás: desde el 2º palista, los 5 últimos segundos antes de cada salida aparecen en grande con un pitido por segundo, y la salida suena con un pitido más agudo y largo. Se puede silenciar con el botón Sonido.
-- Al pulsar Terminar, el botón Guardar parpadea y arranca un autoguardado de 15 segundos que se puede cancelar.
+- Al pulsar Terminar, el botón Guardar parpadea y arranca un autoguardado de 5 segundos que se puede cancelar.
 - Cuando llega el último palista, el botón Terminar parpadea.
 - La pantalla no se apaga mientras la app está abierta.
 
