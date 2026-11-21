@@ -218,6 +218,9 @@ table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;
 .autosave{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 10px;border-radius:6px;background:var(--warn);color:var(--warn-ink);font-weight:600;font-size:15px}
 .autosave .grow{margin-right:auto}
 .autosave .btn.ghost{color:var(--warn-ink);border-color:rgba(0,0,0,.35);background-color:transparent}
+.topseason{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:6px;font-size:13px}
+.topseason b{font-weight:700}
+.top .topseason .btn.ghost{color:var(--bar-ink);border-color:rgba(255,255,255,.45)}
 .tappable{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 /* Ventanas (nombre, elegir fotos, temporada) */
 .modal{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}
@@ -262,7 +265,7 @@ table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;
 'use strict';
 
 const KEY='crono-piraguismo-v1';
-const DISTANCES=[200,500,1000,1500,3000];
+const DISTANCES=[200,500,1000,1500,2000,3000,5000];
 const PRESETS=[30,60,15,45,90,120];
 
 const $=s=>document.querySelector(s);
@@ -471,10 +474,12 @@ function prepView(){
   const custom=ui.customInterval||!PRESETS.includes(S.interval);
 
   const bar='<header class="top"><div class="brand"><span class="brand-name">Crono Piragüismo</span>'+
-    '<span class="sub">Preparación · '+n+(n===1?' participa':' participan')+'</span></div>'+
+    '<span class="sub">Preparación · '+n+(n===1?' participa':' participan')+'</span>'+
+    '<div class="topseason"><span>'+(getSeason()?'Temporada: <b>temporada'+esc(getSeason())+'.xlsx</b>':'Sin temporada: se pedirá al guardar')+'</span>'+
+    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button></div></div>'+
     '<div class="top-right"><button class="btn go" data-act="start"'+(n?'':' disabled')+'>Iniciar salida</button></div></header>';
 
-  const dist=DISTANCES.map(d=>'<button class="chip" aria-pressed="'+(S.distance===d)+'" data-act="dist" data-v="'+d+'">'+d+' m</button>').join('');
+  const dist='<select id="distance" aria-label="Distancia">'+DISTANCES.map(d=>'<option value="'+d+'"'+(S.distance===d?' selected':'')+'>'+d+' m</option>').join('')+'</select>';
   const modes='<button class="chip" aria-pressed="'+(S.mode==='individual')+'" data-act="mode" data-v="individual">Individual</button>'+
     '<button class="chip" aria-pressed="'+(S.mode==='conjunta')+'" data-act="mode" data-v="conjunta">Salida conjunta</button>';
   let ivField='';
@@ -486,11 +491,11 @@ function prepView(){
       '</div></div>';
   }
   const settings='<section class="panel"><h2>Control</h2><div class="settings">'+
-    '<div class="field"><span class="lbl">Distancia</span><div class="chips">'+dist+'</div></div>'+
+    '<div class="field"><label class="lbl" for="distance">Distancia</label>'+dist+'</div>'+
     '<div class="field"><span class="lbl">Tipo de salida</span><div class="chips">'+modes+'</div></div>'+
     ivField+
     '<div class="field"><label class="lbl" for="day">Día</label><input type="date" id="day" value="'+esc(S.day)+'"></div>'+
-    '<div class="field"><span class="lbl">Temporada</span><div class="season">'+seasonLine()+'</div></div>'+
+    '<div class="field"><span class="lbl">Resultados</span><div class="season">'+viewButtons()+'</div></div>'+
     '</div></section>';
 
   const poolTiles=pool.map(p=>
@@ -660,8 +665,11 @@ function filesLocation(){ try{ return bridge()?bridge().location():'Descargas'; 
 function seasonLine(){
   const cur=getSeason();
   return '<span>'+(cur?'Archivo actual: <b>temporada'+esc(cur)+'.xlsx</b>':'Aún no hay temporada: se pedirá al guardar')+'</span>'+
-    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button>'+
-    '<button class="btn small ghost" data-act="viewLast"'+(cur?'':' disabled')+'>Ver último control</button>'+
+    '<button class="btn small ghost" data-act="newSeason">Nueva temporada</button>'+viewButtons();
+}
+function viewButtons(){
+  const cur=getSeason();
+  return '<button class="btn small ghost" data-act="viewLast"'+(cur?'':' disabled')+'>Ver último control</button>'+
     '<button class="btn small ghost" data-act="viewSummary"'+(cur?'':' disabled')+'>Ver resumen</button>';
 }
 function seasonOk(){
@@ -819,7 +827,7 @@ function summaryView(m){
 }
 
 /* ---------- Autoguardado al terminar ---------- */
-const AUTO_SECS=15;
+const AUTO_SECS=5;
 let autoTimer=0;
 function needSave(){ return S.phase==='done'&&S.results.length>0&&!S.savedIn; }
 function autoLeft(){ return Math.max(0,Math.ceil((ui.autoUntil-Date.now())/1000)); }
@@ -1057,6 +1065,7 @@ app.addEventListener('focusout',e=>{
 app.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='ctlSelect'&&ui.modal){ ui.modal.type='control'; ui.modal.idx=+t.value; render(); return; }
+  if(t.id==='distance'){ S.distance=+t.value; save(); render(); return; }
   if(t.id==='files'){const files=[...t.files]; t.value=''; addFiles(files); return;}
   if(t.id==='interval'){
     if(t.value==='custom') ui.customInterval=true;
